@@ -56,7 +56,7 @@ jobs:
         with:
           if-no-files-found: error
           name: ${{ matrix.target }}-bin
-          path: src/main/rust/target/release/${{ matrix.target }}/release/${{ matrix.output-file-name }}
+          path: src/main/rust/target/${{ matrix.target }}/release/${{ matrix.output-file-name }}
 
   build-jar:
     name: build jar file
