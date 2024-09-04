@@ -13,25 +13,31 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output-suffix: so
+            rust-flags: "-C target-feature=-crt-static"
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             output-suffix: so
+            rust-flags: "-C target-feature=-crt-static"
           - target: x86_64-apple-darwin
             os: macos-latest
             cross: false
             output-suffix: dylib
+            rust-flags: ""
           - target: aarch64-apple-darwin
             os: macos-latest
             cross: false
             output-suffix: dylib
+            rust-flags: ""
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             cross: false
             output-suffix: dll
+            rust-flags: ""
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             cross: false
             output-suffix: dll
+            rust-flags: ""
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.80.1
@@ -40,6 +46,8 @@ jobs:
       - name: Run cross
         if: ${{ matrix.cross }}
         working-directory: src/main/rust
+        env:
+          RUSTFLAGS: ${{ matrix.rust-flags }}
         run: |
           cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
           cross build --release --target ${{ matrix.target }}
@@ -51,7 +59,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-bin
-          path: src/main/rust/target/release/libjava_typst.${{ matrix.output-suffix }}
+          path: src/main/rust/target/release/*.${{ matrix.output-suffix }}
 
   build-jar:
     name: build jar file
