@@ -1,4 +1,4 @@
-package de.catalkaya.javatypst;
+package io.github.fatihcatalkaya.javatypst;
 
 import java.io.File;
 import java.io.FileOutputStream;

@@ -816,6 +816,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
+name = "java-typst"
+version = "0.1.0"
+dependencies = [
+ "comemo",
+ "jni",
+ "tar",
+ "time",
+ "ttf-parser 0.24.1",
+ "typst",
+ "typst-assets",
+ "typst-pdf",
+ "ureq",
+ "zune-inflate",
+]
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1991,22 +2007,6 @@ dependencies = [
  "unicode-properties",
  "unscanny",
  "xmp-writer",
-]
-
-[[package]]
-name = "typst-string"
-version = "0.1.0"
-dependencies = [
- "comemo",
- "jni",
- "tar",
- "time",
- "ttf-parser 0.24.1",
- "typst",
- "typst-assets",
- "typst-pdf",
- "ureq",
- "zune-inflate",
 ]
 
 [[package]]

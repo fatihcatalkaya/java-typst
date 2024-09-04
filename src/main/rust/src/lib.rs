@@ -7,7 +7,7 @@ use typst::foundations::Smart;
 use crate::typst_as_lib::TypstWrapperWorld;
 
 #[no_mangle]
-pub extern "system" fn Java_de_catalkaya_javatypst_JavaTypst_render<'local>(
+pub extern "system" fn Java_io_github_fatihcatalkaya_javatypst_JavaTypst_render<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     content: JString<'local>

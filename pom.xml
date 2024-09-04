@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>de.catalkaya</groupId>
+    <groupId>io.github.fatihcatalkaya</groupId>
     <artifactId>java-typst</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
@@ -59,7 +59,7 @@
                         <configuration>
                             <path>src/main/rust</path>
                             <release>true</release>
-                            <copyTo>${project.build.directory}/classes/de/catalkaya/javatypst/libs</copyTo>
+                            <copyTo>${project.build.directory}/classes/io/github/fatihcatalkaya/javatypst/libs</copyTo>
                             <copyWithPlatformDir>true</copyWithPlatformDir>
                         </configuration>
                     </execution>
