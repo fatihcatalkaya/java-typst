@@ -57,9 +57,14 @@ jobs:
         if: ${{ !matrix.cross }}
         working-directory: src/main/rust
         run: cargo build --release --target ${{ matrix.target }}
+      - name: List files
+        working-directory: src/main/rust/target/release
+        run: |
+          ls -la
       - name: upload binary for ${{ matrix.target }}
         uses: actions/upload-artifact@v4
         with:
+          if-no-files-found: error
           name: ${{ matrix.target }}-bin
           path: src/main/rust/target/release/*.${{ matrix.output-suffix }}
 
@@ -70,7 +75,7 @@ jobs:
       - build-rust-library
     steps:
       - name: Setup Maven Action
-        uses: s4u/setup-maven-action@1.14.0
+        uses: s4u/setup-maven-action@v1.14.0
         with:
           java-version: 8
       - name: Compile java sources
