@@ -79,15 +79,15 @@ jobs:
           mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
           mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
           mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
-      - name: Download x86_64-unknown-linux-musl-bin
+      - name: Download x86_64-unknown-linux-gnu-bin
         uses: actions/download-artifact@v4
         with:
-          name: x86_64-unknown-linux-musl-bin
+          name: x86_64-unknown-linux-gnu-bin
           path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
-      - name: Download aarch64-unknown-linux-musl-bin
+      - name: Download aarch64-unknown-linux-gnu-bin
         uses: actions/download-artifact@v4
         with:
-          name: aarch64-unknown-linux-musl-bin
+          name: aarch64-unknown-linux-gnu-bin
           path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-aarch64
       - name: Download x86_64-apple-darwin-bin
         uses: actions/download-artifact@v4
