@@ -1,0 +1,112 @@
+name: Java-Typst Test Workflow
+
+on: push
+
+jobs:
+  build-rust-library:
+    name: build rust library for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            output-suffix: so
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            output-suffix: so
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            cross: false
+            output-suffix: dylib
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cross: false
+            output-suffix: dylib
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+            output-suffix: dll
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+            output-suffix: dll
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.80.1
+        with:
+          target: ${{ matrix.target }}
+      - name: Run cross
+        if: ${{ matrix.cross }}
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
+          cross build --release --target ${{ matrix.target }}
+      - name: Run Cargo
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: upload binary for ${{ matrix.target }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-bin
+          path: src/main/rust/target/release/libjava_typst.${{ matrix.output-suffix }}
+
+  build-jar:
+    name: build jar file
+    runs-on: ubuntu-latest
+    needs:
+      - build-rust-library
+    steps:
+      - name: Setup Maven Action
+        uses: s4u/setup-maven-action@1.14.0
+        with:
+          java-version: 8
+      - name: Compile java sources
+        run: |
+          mvn compile
+      - name: Create lib dirs
+        run: |
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-aarch64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-x86-64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
+      - name: Download x86_64-unknown-linux-musl-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-unknown-linux-musl-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
+      - name: Download aarch64-unknown-linux-musl-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-unknown-linux-musl-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-aarch64
+      - name: Download x86_64-apple-darwin-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-apple-darwin-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-x86-64
+      - name: Download aarch64-apple-darwin-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-apple-darwin-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
+      - name: Download x86_64-pc-windows-msvc-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-pc-windows-msvc-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
+      - name: Download aarch64-pc-windows-msvc-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-pc-windows-msvc-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
+      - name: Test and Package jar file
+        run: |
+          mvn package -Djar.finalName=java-typst
+      - name: Upload jar file
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-file
+          path: target/java-typst.jar
