@@ -46,15 +46,11 @@ jobs:
           RUSTFLAGS: "-C target-feature=-crt-static"
         run: |
           cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
-          cross build --release --target ${{ matrix.target }} --target-dir target
+          cross build --release --target ${{ matrix.target }} --message-format=json
       - name: Run Cargo
         if: ${{ !matrix.cross }}
         working-directory: src/main/rust
-        run: cargo build --release --target ${{ matrix.target }} --target-dir target
-      - name: List files
-        working-directory: src/main/rust/target/release/deps
-        run: |
-          ls -la
+        run: cargo build --release --target ${{ matrix.target }} --message-format=json
       - name: upload binary for ${{ matrix.target }}
         uses: actions/upload-artifact@v4
         with:
