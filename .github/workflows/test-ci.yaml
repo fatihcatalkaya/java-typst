@@ -39,11 +39,13 @@ jobs:
           target: ${{ matrix.target }}
       - name: Run cross
         if: ${{ matrix.cross }}
+        working-directory: src/main/rust
         run: |
           cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
           cross build --release --target ${{ matrix.target }}
       - name: Run Cargo
         if: ${{ !matrix.cross }}
+        working-directory: src/main/rust
         run: cargo build --release --target ${{ matrix.target }}
       - name: upload binary for ${{ matrix.target }}
         uses: actions/upload-artifact@v4
