@@ -113,7 +113,7 @@ impl TypstWrapperWorld {
             // Fetching file from disk
             id.vpath().resolve(&self.root)
         }
-            .ok_or(FileError::AccessDenied)?;
+        .ok_or(FileError::AccessDenied)?;
         // Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
         let content = std::fs::read(&path).map_err(|error| FileError::from_io(error, &path))?;
         Ok(RefMut::map(self.files.borrow_mut(), |files| {
@@ -152,7 +152,7 @@ impl TypstWrapperWorld {
 
             Ok(response)
         })
-            .map_err(|error| PackageError::NetworkFailed(Some(error)))?;
+        .map_err(|error| PackageError::NetworkFailed(Some(error)))?;
 
         let mut compressed_archive = Vec::new();
         response
@@ -228,12 +228,17 @@ fn fonts() -> Vec<Font> {
             let buffer = Bytes::from(entry);
             let face_count = ttf_parser::fonts_in_collection(&buffer).unwrap_or(1);
 
-            (0..face_count).map(move |face| {
-                Font::new(buffer.clone(), face).unwrap_or_else(|| {
-                    panic!("failed to load font from embedded assets (face index {face})")
+            (0..face_count)
+                .map(move |face| {
+                    Font::new(buffer.clone(), face).unwrap_or_else(|| {
+                        panic!("failed to load font from embedded assets (face index {face})")
+                    })
                 })
-            }).collect::<Vec<_>>()
-        }).into_iter().flatten().collect()
+                .collect::<Vec<_>>()
+        })
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 fn retry<T, E>(mut f: impl FnMut() -> Result<T, E>) -> Result<T, E> {
