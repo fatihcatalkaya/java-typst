@@ -13,8 +13,23 @@
         </license>
     </licenses>
 
-    <name>java-typst</name>
-    <url>http://maven.apache.org</url>
+    <name>${project.groupId}:${project.artifactId}</name>
+    <description>A library that allows to render Typst markup language to pdf files</description>
+    <url>https://github.com/fatihcatalkaya/java-typst</url>
+
+    <developers>
+        <developer>
+            <name>Fatih Çatalkaya</name>
+            <email>fatih.catalkaya@yahoo.de</email>
+            <url>https://github.com/fatihcatalkaya</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/fatihcatalkaya/java-typst.git</connection>
+        <developerConnection>scm:git:git://github.com/fatihcatalkaya/java-typst.git</developerConnection>
+        <url>https://github.com/fatihcatalkaya/java-typst/tree/master</url>
+    </scm>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
