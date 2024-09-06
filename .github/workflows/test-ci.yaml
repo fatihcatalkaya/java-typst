@@ -111,7 +111,7 @@ jobs:
           path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
       - name: Test and Package jar file
         run: |
-          mvn package -Djar.finalName=java-typst
+          mvn package
       - name: Upload jar file
         uses: actions/upload-artifact@v4
         with:
