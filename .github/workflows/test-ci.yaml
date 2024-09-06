@@ -116,4 +116,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jar-file
-          path: target/java-typst.jar
+          path: target/java-typst-*.jar
