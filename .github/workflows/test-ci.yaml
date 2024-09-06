@@ -109,28 +109,6 @@ jobs:
         with:
           name: aarch64-pc-windows-msvc-bin
           path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
-      - name: Test and Package jar file
-        run: |
-          mvn package
-      - name: Upload jar file
-        uses: actions/upload-artifact@v4
-        with:
-          if-no-files-found: error
-          name: build-artifacts
-          path: |
-            target/java-typst-*.jar
-            target/java-typst-*.jar.asc
-
-  release-jar:
-    name: release on maven central
-    needs:
-      - build-jar
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup Maven Action
-        uses: s4u/setup-maven-action@v1.14.0
-        with:
-          java-version: 8
       - name: Setup maven settings
         uses: s4u/maven-settings-action@v3.0.0
         with:
@@ -140,12 +118,13 @@ jobs:
               "username": "${{ secrets.SONATYPE_USERNAME }}",
               "password": "${{ secrets.SONATYPE_PASSWORD }}"
             }]
-      - run: |
-          mkdir -p target
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target
       - name: Publish
-        run: mvn deploy
+        run: mvn publish
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: build-artifacts
+          path: |
+            target/java-typst-*.jar
+            target/java-typst-*.jar.asc
