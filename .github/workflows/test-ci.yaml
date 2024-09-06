@@ -110,7 +110,7 @@ jobs:
           name: aarch64-pc-windows-msvc-bin
           path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
       - name: Setup maven settings
-        if: startsWith(github.event.ref, 'refs/tags/')
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: s4u/maven-settings-action@v3.0.0
         with:
           servers: |
@@ -120,16 +120,16 @@ jobs:
               "password": "${{ secrets.SONATYPE_PASSWORD }}"
             }]
       - name: Import GPG key
-        if: startsWith(github.event.ref, 'refs/tags/')
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: crazy-max/ghaction-import-gpg@v6
         with:
           gpg_private_key: ${{ secrets.GPG_SIGNING_KEY }}
           trust_level: 5
       - name: Publish to maven central
-        if: startsWith(github.event.ref, 'refs/tags/')
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: mvn deploy
       - name: Build and test
-        if: !startsWith(github.event.ref, 'refs/tags/')
+        if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
         run: mvn package
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
