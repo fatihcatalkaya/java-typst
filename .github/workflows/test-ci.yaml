@@ -115,5 +115,37 @@ jobs:
       - name: Upload jar file
         uses: actions/upload-artifact@v4
         with:
-          name: jar-file
-          path: target/java-typst-*.jar
+          if-no-files-found: error
+          name: build-artifacts
+          path: |
+            target/java-typst-*.jar
+            target/java-typst-*.jar.asc
+
+  release-jar:
+    name: release on maven central
+    needs:
+      - build-jar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Maven Action
+        uses: s4u/setup-maven-action@v1.14.0
+        with:
+          java-version: 8
+      - name: Setup maven settings
+        uses: s4u/maven-settings-action@v3.0.0
+        with:
+          servers: |
+            [{
+              "id": "sonatype-nexus-snapshots",
+              "username": "${{ secrets.SONATYPE_USERNAME }}",
+              "password": "${{ secrets.SONATYPE_PASSWORD }}"
+            }]
+      - run: |
+          mkdir -p target
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: target
+      - name: Publish
+        run: mvn deploy
