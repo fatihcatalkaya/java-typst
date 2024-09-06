@@ -13,8 +13,23 @@
         </license>
     </licenses>
 
-    <name>java-typst</name>
-    <url>http://maven.apache.org</url>
+    <name>${project.groupId}:${project.artifactId}</name>
+    <description>A library that allows to render Typst markup language to pdf files</description>
+    <url>https://github.com/fatihcatalkaya/java-typst</url>
+
+    <developers>
+        <developer>
+            <name>Fatih Çatalkaya</name>
+            <email>fatih.catalkaya@yahoo.de</email>
+            <url>https://github.com/fatihcatalkaya</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/fatihcatalkaya/java-typst.git</connection>
+        <developerConnection>scm:git:git://github.com/fatihcatalkaya/java-typst.git</developerConnection>
+        <url>https://github.com/fatihcatalkaya/java-typst/tree/master</url>
+    </scm>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -53,9 +68,7 @@
                 <executions>
                     <execution>
                         <id>java-typst-build</id>
-                        <goals>
-                            <goal>build</goal>
-                        </goals>
+
                         <configuration>
                             <path>src/main/rust</path>
                             <release>true</release>
@@ -70,8 +83,66 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <source>8</source>
+                    <target>8</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.3</version>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <keyname>44D7F1B70392915130F652E10B824C8E733B1743</keyname>
+                    <gpgArguments>
+                        <argument>--pinentry-mode</argument>
+                        <argument>loopback</argument>
+                    </gpgArguments>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.5.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
                 </configuration>
             </plugin>
         </plugins>

@@ -1,0 +1,141 @@
+name: Java-Typst Test Workflow
+
+on: push
+
+jobs:
+  build-rust-library:
+    name: build rust library for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+            output-file-name: libjava_typst.so
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+            output-file-name: libjava_typst.so
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            cross: false
+            output-file-name: libjava_typst.dylib
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cross: false
+            output-file-name: libjava_typst.dylib
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+            output-file-name: java_typst.dll
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+            output-file-name: java_typst.dll
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.80.1
+        with:
+          target: ${{ matrix.target }}
+      - name: Run cross
+        if: ${{ matrix.cross }}
+        working-directory: src/main/rust
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static"
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
+          cross build --release --target ${{ matrix.target }}
+      - name: Run Cargo
+        if: ${{ !matrix.cross }}
+        working-directory: src/main/rust
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: upload binary for ${{ matrix.target }}
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: ${{ matrix.target }}-bin
+          path: src/main/rust/target/${{ matrix.target }}/release/${{ matrix.output-file-name }}
+
+  build-jar:
+    name: build jar (and publish, if tagged)
+    runs-on: ubuntu-latest
+    needs:
+      - build-rust-library
+    steps:
+      - name: Setup Maven Action
+        uses: s4u/setup-maven-action@v1.14.0
+        with:
+          java-version: 8
+      - name: Compile java sources
+        run: |
+          mvn compile
+      - name: Create lib dirs
+        run: |
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-aarch64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-x86-64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
+          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
+      - name: Download x86_64-unknown-linux-gnu-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-unknown-linux-gnu-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
+      - name: Download aarch64-unknown-linux-gnu-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-unknown-linux-gnu-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-aarch64
+      - name: Download x86_64-apple-darwin-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-apple-darwin-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-x86-64
+      - name: Download aarch64-apple-darwin-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-apple-darwin-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
+      - name: Download x86_64-pc-windows-msvc-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-pc-windows-msvc-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
+      - name: Download aarch64-pc-windows-msvc-bin
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-pc-windows-msvc-bin
+          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-aarch64
+      - name: Setup maven settings
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: s4u/maven-settings-action@v3.0.0
+        with:
+          servers: |
+            [{
+              "id": "central",
+              "username": "${{ secrets.SONATYPE_USERNAME }}",
+              "password": "${{ secrets.SONATYPE_PASSWORD }}"
+            }]
+      - name: Import GPG key
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_SIGNING_KEY }}
+          trust_level: 5
+      - name: Publish to maven central
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: mvn deploy
+      - name: Build and test
+        if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
+        run: mvn package
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: build-artifacts
+          path: |
+            target/java-typst-*.jar
+            target/java-typst-*.jar.asc
