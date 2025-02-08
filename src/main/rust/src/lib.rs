@@ -3,8 +3,7 @@ mod typst_as_lib;
 use crate::typst_as_lib::TypstWrapperWorld;
 use jni::objects::{JByteArray, JClass, JString};
 use jni::JNIEnv;
-use typst::eval::Tracer;
-use typst::foundations::Smart;
+use typst_pdf::PdfOptions;
 
 #[no_mangle]
 pub extern "system" fn Java_io_github_fatihcatalkaya_javatypst_JavaTypst_render<'local>(
@@ -19,11 +18,10 @@ pub extern "system" fn Java_io_github_fatihcatalkaya_javatypst_JavaTypst_render<
     let world = TypstWrapperWorld::new("./".to_owned(), input);
 
     // Render document
-    let mut tracer = Tracer::default();
-    let document = typst::compile(&world, &mut tracer).expect("Error compiling typst");
+    let document = typst::compile(&world).output.expect("Error compiling typst");
 
     // Output to pdf
-    let pdf = typst_pdf::pdf(&document, Smart::Auto, None);
+    let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).expect("Error exporting pdf");
 
     let java_bytes = env
         .byte_array_from_slice(pdf.as_slice())
