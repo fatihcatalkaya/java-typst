@@ -1,12 +1,12 @@
 [package]
 name = "java-typst"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-typst = "0.11.1"
-typst-assets = {version = "0.11.1", features = ["fonts"]}
-typst-pdf = "0.11.1"
+typst = "0.12.0"
+typst-assets = {version = "0.12.0", features = ["fonts"]}
+typst-pdf = "0.12.0"
 #typst-as-library dependencies
 comemo = "0.4"
 # Fetching and unzipping packages
@@ -15,10 +15,10 @@ zune-inflate = { version = "0.2", default-features = false, features = [
     "std",
 ] }
 tar = "0.4"
-ureq = "2.9"
+ureq = "2.12.1"
 # utils
 time = "0.3"
-ttf-parser = "0.24"
+ttf-parser = "0.25.1"
 
 jni = "0.21.1"
 

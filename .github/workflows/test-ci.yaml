@@ -36,7 +36,7 @@ jobs:
             output-file-name: java_typst.dll
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.80.1
+      - uses: dtolnay/rust-toolchain@1.84.1
         with:
           target: ${{ matrix.target }}
       - name: Run cross
