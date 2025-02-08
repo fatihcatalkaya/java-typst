@@ -15,7 +15,7 @@ zune-inflate = { version = "0.2", default-features = false, features = [
     "std",
 ] }
 tar = "0.4"
-ureq = "3.0.5"
+ureq = "2.12.1"
 # utils
 time = "0.3"
 ttf-parser = "0.25.1"
