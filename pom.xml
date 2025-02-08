@@ -4,7 +4,7 @@
 
     <groupId>io.github.fatihcatalkaya</groupId>
     <artifactId>java-typst</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.1</version>
     <packaging>jar</packaging>
     <licenses>
         <license>
@@ -72,7 +72,7 @@
                         <goals><goal>build</goal></goals>
                         <configuration>
                             <path>src/main/rust</path>
-                            <release>false</release>
+                            <release>true</release>
                             <copyTo>${project.build.directory}/classes/io/github/fatihcatalkaya/javatypst/libs</copyTo>
                             <copyWithPlatformDir>true</copyWithPlatformDir>
                         </configuration>
