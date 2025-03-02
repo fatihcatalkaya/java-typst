@@ -42,8 +42,9 @@ jobs:
       - name: Run cross
         if: ${{ matrix.cross }}
         working-directory: src/main/rust
-        env:
-          RUSTFLAGS: "-C target-feature=+crt-static"
+        # Moved into cargo.toml
+        #env:
+        #  RUSTFLAGS: "-C target-feature=+crt-static"
         run: |
           cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
           cross build --release --target ${{ matrix.target }}
