@@ -80,7 +80,7 @@ struct FileEntry {
 impl FileEntry {
     fn new(bytes: Vec<u8>, source: Option<Source>) -> Self {
         Self {
-            bytes: bytes.into(),
+            bytes: Bytes::new(bytes),
             source,
         }
     }
@@ -228,7 +228,7 @@ impl typst::World for TypstWrapperWorld {
 fn fonts() -> Vec<Font> {
     typst_assets::fonts()
         .map(|entry| {
-            let buffer = Bytes::from(entry);
+            let buffer = Bytes::new(entry);
             let face_count = ttf_parser::fonts_in_collection(&buffer).unwrap_or(1);
 
             (0..face_count)
