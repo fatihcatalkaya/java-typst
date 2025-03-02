@@ -4,7 +4,7 @@
 
     <groupId>io.github.fatihcatalkaya</groupId>
     <artifactId>java-typst</artifactId>
-    <version>1.1.1</version>
+    <version>1.2.0</version>
     <packaging>jar</packaging>
     <licenses>
         <license>
