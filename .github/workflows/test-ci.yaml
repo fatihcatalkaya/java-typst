@@ -12,12 +12,12 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            cross: true
+            cross: false
             container: quay.io/pypa/manylinux_2_34_x86_64:2025.02.28-1
             output-file-name: libjava_typst.so
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            cross: true
+            cross: false
             container: quay.io/pypa/manylinux_2_34_aarch64:2025.02.28-1
             output-file-name: libjava_typst.so
           - target: x86_64-apple-darwin
