@@ -10,13 +10,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             cross: true
+            container: quay.io/pypa/manylinux_2_34_x86_64:2025.02.28-1
             output-file-name: libjava_typst.so
-          - target: aarch64-unknown-linux-musl
+          - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             cross: true
+            container: quay.io/pypa/manylinux_2_34_aarch64:2025.02.28-1
             output-file-name: libjava_typst.so
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -42,9 +44,8 @@ jobs:
       - name: Run cross
         if: ${{ matrix.cross }}
         working-directory: src/main/rust
-        # Moved into cargo.toml
-        #env:
-        #  RUSTFLAGS: "-C target-feature=+crt-static"
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static"
         run: |
           cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
           cross build --release --target ${{ matrix.target }}

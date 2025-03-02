@@ -22,12 +22,3 @@ jni = "0.21.1"
 
 [lib]
 crate-type = ["cdylib"]
-
-[profile.release.x86_64-apple-darwin]
-rustflags = ["-C", "target-feature=+crt-static"]
-[profle.release.aarch64-apple-darwin]
-rustflags = ["-C", "target-feature=+crt-static"]
-[profile.release.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
-[profile.release.aarch64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
