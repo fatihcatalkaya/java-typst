@@ -54,31 +54,43 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
+    <profiles>
+        <profile>
+            <id>rust</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.questdb</groupId>
+                        <artifactId>rust-maven-plugin</artifactId>
+                        <version>1.2.0</version>
+                        <executions>
+                            <execution>
+                                <id>java-typst-build</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>build</goal>
+                                </goals>
+                                <configuration>
+                                    <path>src/main/rust</path>
+                                    <release>true</release>
+                                    <copyTo>${project.build.directory}/classes/io/github/fatihcatalkaya/javatypst/libs
+                                    </copyTo>
+                                    <copyWithPlatformDir>true</copyWithPlatformDir>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
     <build>
         <plugins>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.4.0</version>
             </plugin>
-            <plugin>
-                <groupId>org.questdb</groupId>
-                <artifactId>rust-maven-plugin</artifactId>
-                <version>1.2.0</version>
-                <executions>
-                    <execution>
-                        <id>java-typst-build</id>
-                        <phase>generate-sources</phase>
-                        <goals><goal>build</goal></goals>
-                        <configuration>
-                            <path>src/main/rust</path>
-                            <release>true</release>
-                            <copyTo>${project.build.directory}/classes/io/github/fatihcatalkaya/javatypst/libs</copyTo>
-                            <copyWithPlatformDir>true</copyWithPlatformDir>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
