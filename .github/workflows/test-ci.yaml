@@ -1,42 +1,26 @@
 name: Java-Typst Test Workflow
-
 on: push
-
 jobs:
   build-rust-library:
-    name: build rust library for ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-20.04
-            container: quay.io/pypa/manylinux_2_34_x86_64:2025.02.28-1
-            output-file-name: libjava_typst.so
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            output-file-name: libjava_typst.dylib
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            output-file-name: libjava_typst.dylib
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            output-file-name: java_typst.dll
+    name: build rust library for x86_64-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux2014_x86_64:2025.03.15-1
     steps:
+      - name: Show GLIBC
+        run: ldd --version
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.84.1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          target: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-gnu
       - name: Run Cargo
         working-directory: src/main/rust
-        run: cargo build --release --target ${{ matrix.target }}
-      - name: upload binary for ${{ matrix.target }}
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+      - name: upload binary for x86_64-unknown-linux-gnu
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
-          name: ${{ matrix.target }}-bin
-          path: src/main/rust/target/${{ matrix.target }}/release/${{ matrix.output-file-name }}
+          name: x86_64-unknown-linux-gnu-bin
+          path: src/main/rust/target/x86_64-unknown-linux-gnu/release/libjava_typst.so
 
   build-jar:
     name: build jar (and publish, if tagged)
