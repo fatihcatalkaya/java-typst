@@ -38,29 +38,11 @@ jobs:
       - name: Create lib dirs
         run: |
           mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
-          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-x86-64
-          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
-          mkdir -p target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
       - name: Download x86_64-unknown-linux-gnu-bin
         uses: actions/download-artifact@v4.1.9
         with:
           name: x86_64-unknown-linux-gnu-bin
           path: target/classes/io/github/fatihcatalkaya/javatypst/libs/linux-x86-64
-      - name: Download x86_64-apple-darwin-bin
-        uses: actions/download-artifact@v4.1.9
-        with:
-          name: x86_64-apple-darwin-bin
-          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-x86-64
-      - name: Download aarch64-apple-darwin-bin
-        uses: actions/download-artifact@v4.1.9
-        with:
-          name: aarch64-apple-darwin-bin
-          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/darwin-aarch64
-      - name: Download x86_64-pc-windows-msvc-bin
-        uses: actions/download-artifact@v4.1.9
-        with:
-          name: x86_64-pc-windows-msvc-bin
-          path: target/classes/io/github/fatihcatalkaya/javatypst/libs/win32-x86-64
       - name: Setup maven settings
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: s4u/maven-settings-action@v3.1.0
