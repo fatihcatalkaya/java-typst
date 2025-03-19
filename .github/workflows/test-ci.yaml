@@ -16,11 +16,11 @@ jobs:
             output-file-name: libjava_typst.so
           - target: aarch64-apple-darwin
             os: macos-latest
-            cross: true
+            cross: false
             output-file-name: libjava_typst.dylib
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            cross: true
+            cross: false
             output-file-name: java_typst.dll
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +35,10 @@ jobs:
         run: |
           cargo install cross --git https://github.com/cross-rs/cross.git --locked --rev 085092ca
           cross build --release --target ${{ matrix.target }}
+      - name: Run Cargo
+        if: ${{ !matrix.cross }}
+        working-directory: src/main/rust
+        run: cargo build --release --target ${{ matrix.target }}
       - name: upload binary for ${{ matrix.target }}
         uses: actions/upload-artifact@v4
         with:
