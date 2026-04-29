@@ -1073,6 +1073,7 @@ version = "2.0.0"
 dependencies = [
  "flate2",
  "tar",
+ "typst",
  "typst-as-lib",
  "typst-pdf",
 ]
