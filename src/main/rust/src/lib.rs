@@ -1,5 +1,6 @@
 use std::alloc::Layout;
 use std::cell::RefCell;
+use typst_as_lib::typst_kit_options::TypstKitFontOptions;
 use typst_as_lib::TypstEngine;
 use typst_pdf::PdfOptions;
 
@@ -71,8 +72,12 @@ pub extern "C" fn last_error_len() -> u32 {
 }
 
 fn compile(source: String) -> Result<Vec<u8>, String> {
+    let font_options = TypstKitFontOptions::new()
+        .include_system_fonts(false)
+        .include_embedded_fonts(true);
     let engine = TypstEngine::builder()
         .main_file(source)
+        .search_fonts_with(font_options)
         .build();
 
     let doc = engine
