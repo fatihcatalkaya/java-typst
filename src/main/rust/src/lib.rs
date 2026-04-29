@@ -208,15 +208,33 @@ fn call_host_fetch(url: &str) -> Result<Vec<u8>, String> {
 }
 
 fn unpack_tar_gz_into_cache(spec_key: &str, data: &[u8]) -> Result<(), String> {
+    // Derive expected leading dir ("name-version") from spec_key "ns/name/version"
+    let leading_dir: String = {
+        let mut parts = spec_key.split('/');
+        parts.next(); // namespace
+        let name    = parts.next().unwrap_or("");
+        let version = parts.next().unwrap_or("");
+        format!("{name}-{version}")
+    };
+
     let gz = GzDecoder::new(std::io::Cursor::new(data));
     let mut archive = Archive::new(gz);
     for entry in archive.entries().map_err(|e| e.to_string())? {
         let mut entry = entry.map_err(|e| e.to_string())?;
         let path: PathBuf = entry.path().map_err(|e| e.to_string())?.into_owned();
-        // Archive entries are "name-version/file.typ"; skip the leading component.
-        let file_path: PathBuf = path.components().skip(1).collect();
+
+        // Strip the leading component when the archive is rooted (e.g. "name-version/")
+        // or starts with "." (CurDir). Flat archives (packages.typst.org) are used as-is.
+        let file_path: PathBuf = match path.components().next() {
+            Some(std::path::Component::CurDir) => path.components().skip(1).collect(),
+            Some(std::path::Component::Normal(c)) if c == leading_dir.as_str() => {
+                path.components().skip(1).collect()
+            }
+            _ => path.clone(),
+        };
+
         if file_path.as_os_str().is_empty() {
-            continue; // skip the directory entry itself
+            continue;
         }
         let mut bytes = Vec::new();
         entry.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
