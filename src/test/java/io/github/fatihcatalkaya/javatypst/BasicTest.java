@@ -1,6 +1,7 @@
 package io.github.fatihcatalkaya.javatypst;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -13,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class BasicTest {
 
@@ -43,10 +45,13 @@ public class BasicTest {
 
   @Test
   public void testPackageImportProducesError() {
-    // Package resolver is not wired; @preview imports must fail cleanly
+    // Empty map — map-only mode, no HTTP fallback — missing package must throw
     assertThrows(
         TypstRenderException.class,
-        () -> JavaTypst.render("#import \"@preview/example:0.1.0\": *\n= Hello")
+        () -> JavaTypst.render(
+            "#import \"@preview/example:0.1.0\": *\n= Hello",
+            Map.of()
+        )
     );
   }
 
@@ -72,5 +77,22 @@ public class BasicTest {
 
     assertArrayEquals(first, second);
     assertEquals(1, callCount[0], "resolver must be called exactly once");
+  }
+
+  @Test
+  public void testPackageRenderOffline() throws IOException {
+    byte[] tarGz;
+    try (InputStream is = BasicTest.class.getResourceAsStream("testpkg-0.1.0.tar.gz")) {
+      assertNotNull(is, "testpkg-0.1.0.tar.gz missing from test resources");
+      tarGz = is.readAllBytes();
+    }
+    Map<String, byte[]> packages = Map.of("@preview/testpkg:0.1.0", tarGz);
+    // Will fail until WASM is rebuilt in Task 8 — that is expected for now
+    byte[] pdf = JavaTypst.render(
+        "#import \"@preview/testpkg:0.1.0\": hello\n#hello()",
+        packages
+    );
+    assertNotNull(pdf);
+    assertTrue(pdf.length > 0);
   }
 }
