@@ -10,6 +10,9 @@ thread_local! {
 
 #[no_mangle]
 pub extern "C" fn alloc(len: u32) -> *mut u8 {
+    if len == 0 {
+        return std::ptr::NonNull::dangling().as_ptr();
+    }
     let layout = Layout::array::<u8>(len as usize).unwrap();
     unsafe { std::alloc::alloc(layout) }
 }
@@ -18,6 +21,9 @@ pub extern "C" fn alloc(len: u32) -> *mut u8 {
 /// `ptr` must have been returned by `alloc(len)` and not yet freed.
 #[no_mangle]
 pub unsafe extern "C" fn dealloc(ptr: *mut u8, len: u32) {
+    if len == 0 {
+        return;
+    }
     let layout = Layout::array::<u8>(len as usize).unwrap();
     std::alloc::dealloc(ptr, layout);
 }

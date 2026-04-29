@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 
 public final class JavaTypst {
 
-    private static Instance instance;
+    private static volatile Instance instance;
     private static ExportFunction allocFn;
     private static ExportFunction deallocFn;
     private static ExportFunction renderFn;
@@ -33,17 +33,25 @@ public final class JavaTypst {
                     .withOptions(WasiOptions.builder().build())
                     .build();
             var store = new Store().addFunction(wasi.toHostFunctions());
-            instance = store.instantiate("java-typst", Parser.parse(stream));
-            allocFn      = instance.export("alloc");
-            deallocFn    = instance.export("dealloc");
-            renderFn     = instance.export("render");
-            lastErrPtrFn = instance.export("last_error_ptr");
-            lastErrLenFn = instance.export("last_error_len");
+            Instance newInstance = store.instantiate("java-typst", Parser.parse(stream));
+            allocFn      = newInstance.export("alloc");
+            deallocFn    = newInstance.export("dealloc");
+            renderFn     = newInstance.export("render");
+            lastErrPtrFn = newInstance.export("last_error_ptr");
+            lastErrLenFn = newInstance.export("last_error_len");
+            instance = newInstance;  // only set after all exports resolved
         } catch (Exception e) {
             throw new RuntimeException("Failed to load java_typst.wasm", e);
         }
     }
 
+    /**
+     * Renders Typst markup to a PDF document.
+     *
+     * @param content Typst markup source
+     * @return PDF document as a byte array
+     * @throws TypstRenderException if the Typst source fails to compile
+     */
     public static byte[] render(String content) {
         synchronized (LOCK) {
             ensureInitialized();
@@ -52,29 +60,29 @@ public final class JavaTypst {
             byte[] inputBytes = content.getBytes(StandardCharsets.UTF_8);
             int inLen = inputBytes.length;
             int inPtr = (int) allocFn.apply(inLen)[0];
-            memory.write(inPtr, inputBytes);
-
             int outLenPtr = (int) allocFn.apply(4)[0];
 
-            int outPtr = (int) renderFn.apply(inPtr, inLen, outLenPtr)[0];
+            try {
+                memory.write(inPtr, inputBytes);
+                int outPtr = (int) renderFn.apply(inPtr, inLen, outLenPtr)[0];
 
-            if (outPtr == 0) {
-                int errPtr = (int) lastErrPtrFn.apply()[0];
-                int errLen = (int) lastErrLenFn.apply()[0];
-                String errorMsg = memory.readString(errPtr, errLen);
+                if (outPtr == 0) {
+                    int errPtr = (int) lastErrPtrFn.apply()[0];
+                    int errLen = (int) lastErrLenFn.apply()[0];
+                    String errorMsg = memory.readString(errPtr, errLen);
+                    throw new TypstRenderException(errorMsg);
+                }
+
+                int outLen = memory.readInt(outLenPtr);
+                byte[] pdfBytes = memory.readBytes(outPtr, outLen);
+                deallocFn.apply(outPtr, outLen);
+                return pdfBytes;
+            } finally {
                 deallocFn.apply(outLenPtr, 4);
                 deallocFn.apply(inPtr, inLen);
-                throw new TypstRenderException(errorMsg);
             }
-
-            int outLen = memory.readInt(outLenPtr);
-            byte[] pdfBytes = memory.readBytes(outPtr, outLen);
-
-            deallocFn.apply(outPtr, outLen);
-            deallocFn.apply(outLenPtr, 4);
-            deallocFn.apply(inPtr, inLen);
-
-            return pdfBytes;
         }
     }
+
+    private JavaTypst() {}
 }
