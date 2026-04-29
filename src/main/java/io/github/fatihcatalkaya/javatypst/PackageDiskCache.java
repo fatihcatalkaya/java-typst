@@ -16,14 +16,12 @@ final class PackageDiskCache {
 
     byte[] get(String namespace, String name, String version, TypstPackageResolver resolver)
             throws TypstPackageNotFoundException {
-        Path archivePath = cacheDir
-            .resolve(namespace).resolve(name).resolve(version + ".tar.gz");
+        Path archivePath = cacheDir.resolve(namespace).resolve(name).resolve(version + ".tar.gz");
         try {
             if (Files.exists(archivePath)) {
                 return Files.readAllBytes(archivePath);
             }
-            Object lock = locks.computeIfAbsent(
-                namespace + "/" + name + "/" + version, k -> new Object());
+            Object lock = locks.computeIfAbsent(namespace + "/" + name + "/" + version, k -> new Object());
             synchronized (lock) {
                 if (Files.exists(archivePath)) {
                     return Files.readAllBytes(archivePath);

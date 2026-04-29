@@ -5,13 +5,11 @@ import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Memory;
 import com.dylibso.chicory.runtime.Store;
+import com.dylibso.chicory.wasi.WasiOptions;
+import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.types.FunctionType;
 import com.dylibso.chicory.wasm.types.ValType;
-import com.dylibso.chicory.wasi.WasiOptions;
-import com.dylibso.chicory.wasi.WasiPreview1;
-
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -69,8 +67,7 @@ public final class JavaTypst {
         if (dir == null) throw new NullPointerException("dir");
         synchronized (LOCK) {
             if (instance != null) {
-                throw new IllegalStateException(
-                    "setPackageCacheDirectory must be called before the first render");
+                throw new IllegalStateException("setPackageCacheDirectory must be called before the first render");
             }
             packageCacheDir = dir;
         }
@@ -124,8 +121,8 @@ public final class JavaTypst {
     // Caller must hold LOCK.
     private static void ensureInitialized() {
         if (instance != null) return;
-        try (InputStream stream = JavaTypst.class.getResourceAsStream(
-                "/io/github/fatihcatalkaya/javatypst/java_typst.wasm")) {
+        try (InputStream stream =
+                JavaTypst.class.getResourceAsStream("/io/github/fatihcatalkaya/javatypst/java_typst.wasm")) {
             if (stream == null) {
                 throw new RuntimeException("java_typst.wasm not found on classpath");
             }
@@ -137,40 +134,36 @@ public final class JavaTypst {
                     .build();
 
             var fetchFn = new HostFunction(
-                "java_typst_host", "host_fetch_url",
-                FunctionType.of(
-                    List.of(ValType.I32, ValType.I32, ValType.I32, ValType.I32),
-                    List.of(ValType.I32)),
-                (Instance inst, long... args) -> {
-                    int urlPtr = (int) args[0], urlLen = (int) args[1];
-                    int outBuf  = (int) args[2], outCap  = (int) args[3];
-                    Memory mem = inst.memory();
-                    String url = mem.readString(urlPtr, urlLen);
-                    if (outBuf == 0) {
-                        try {
-                            byte[] bytes = fetchPackage(url);
-                            pendingFetches.put(url, bytes);
-                            return new long[]{ bytes.length };
-                        } catch (Exception ex) {
-                            return new long[]{ -1 };
+                    "java_typst_host",
+                    "host_fetch_url",
+                    FunctionType.of(List.of(ValType.I32, ValType.I32, ValType.I32, ValType.I32), List.of(ValType.I32)),
+                    (Instance inst, long... args) -> {
+                        int urlPtr = (int) args[0], urlLen = (int) args[1];
+                        int outBuf = (int) args[2], outCap = (int) args[3];
+                        Memory mem = inst.memory();
+                        String url = mem.readString(urlPtr, urlLen);
+                        if (outBuf == 0) {
+                            try {
+                                byte[] bytes = fetchPackage(url);
+                                pendingFetches.put(url, bytes);
+                                return new long[] {bytes.length};
+                            } catch (Exception ex) {
+                                return new long[] {-1};
+                            }
                         }
-                    }
-                    byte[] bytes = pendingFetches.remove(url);
-                    if (bytes == null) return new long[]{ -1 };
-                    int len = Math.min(bytes.length, outCap);
-                    mem.write(outBuf, Arrays.copyOf(bytes, len));
-                    return new long[]{ len };
-                }
-            );
+                        byte[] bytes = pendingFetches.remove(url);
+                        if (bytes == null) return new long[] {-1};
+                        int len = Math.min(bytes.length, outCap);
+                        mem.write(outBuf, Arrays.copyOf(bytes, len));
+                        return new long[] {len};
+                    });
 
-            var store = new Store()
-                .addFunction(wasi.toHostFunctions())
-                .addFunction(fetchFn);
+            var store = new Store().addFunction(wasi.toHostFunctions()).addFunction(fetchFn);
 
             Instance newInstance = store.instantiate("java-typst", Parser.parse(stream));
-            allocFn      = newInstance.export("alloc");
-            deallocFn    = newInstance.export("dealloc");
-            renderFn     = newInstance.export("render");
+            allocFn = newInstance.export("alloc");
+            deallocFn = newInstance.export("dealloc");
+            renderFn = newInstance.export("render");
             lastErrPtrFn = newInstance.export("last_error_ptr");
             lastErrLenFn = newInstance.export("last_error_len");
             instance = newInstance;
@@ -187,7 +180,7 @@ public final class JavaTypst {
 
         byte[] inputBytes = content.getBytes(StandardCharsets.UTF_8);
         int inLen = inputBytes.length;
-        int inPtr    = (int) allocFn.apply(inLen)[0];
+        int inPtr = (int) allocFn.apply(inLen)[0];
         int outLenPtr = (int) allocFn.apply(4)[0];
         try {
             memory.write(inPtr, inputBytes);
@@ -227,30 +220,28 @@ public final class JavaTypst {
         String path = url.substring("https://packages.typst.org/".length());
         int slash = path.indexOf('/');
         String namespace = path.substring(0, slash);
-        String filename  = path.substring(slash + 1, path.length() - ".tar.gz".length());
-        int lastHyphen   = filename.lastIndexOf('-');
-        String name      = filename.substring(0, lastHyphen);
-        String version   = filename.substring(lastHyphen + 1);
-        return new String[]{namespace, name, version};
+        String filename = path.substring(slash + 1, path.length() - ".tar.gz".length());
+        int lastHyphen = filename.lastIndexOf('-');
+        String name = filename.substring(0, lastHyphen);
+        String version = filename.substring(lastHyphen + 1);
+        return new String[] {namespace, name, version};
     }
 
     /** Converts "@preview/cetz:0.3.2" → "https://packages.typst.org/preview/cetz-0.3.2.tar.gz" */
     private static String specToUrl(String spec) {
         String s = spec.startsWith("@") ? spec.substring(1) : spec;
         int colon = s.lastIndexOf(':');
-        String version   = s.substring(colon + 1);
+        String version = s.substring(colon + 1);
         String nsAndName = s.substring(0, colon);
         int slash = nsAndName.indexOf('/');
         String namespace = nsAndName.substring(0, slash);
-        String name      = nsAndName.substring(slash + 1);
+        String name = nsAndName.substring(slash + 1);
         return "https://packages.typst.org/" + namespace + "/" + name + "-" + version + ".tar.gz";
     }
 
     private static Path defaultCacheDir() {
         String xdg = System.getenv("XDG_CACHE_HOME");
-        Path base = (xdg != null && !xdg.isEmpty())
-            ? Path.of(xdg)
-            : Path.of(System.getProperty("user.home"), ".cache");
+        Path base = (xdg != null && !xdg.isEmpty()) ? Path.of(xdg) : Path.of(System.getProperty("user.home"), ".cache");
         return base.resolve("java-typst/packages");
     }
 
