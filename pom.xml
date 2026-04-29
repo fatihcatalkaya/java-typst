@@ -70,23 +70,43 @@
             <id>rust</id>
             <build>
                 <plugins>
+                    <!-- 1. Invoke cargo; .cargo/config.toml sets target = wasm32-wasip1 -->
                     <plugin>
-                        <groupId>org.questdb</groupId>
-                        <artifactId>rust-maven-plugin</artifactId>
-                        <version>1.2.0</version>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.4.1</version>
                         <executions>
                             <execution>
-                                <id>java-typst-build</id>
+                                <id>cargo-build-wasm</id>
                                 <phase>generate-sources</phase>
-                                <goals>
-                                    <goal>build</goal>
-                                </goals>
+                                <goals><goal>exec</goal></goals>
                                 <configuration>
-                                    <path>src/main/rust</path>
-                                    <release>true</release>
-                                    <copyTo>${project.build.directory}/classes/io/github/fatihcatalkaya/javatypst/libs
-                                    </copyTo>
-                                    <copyWithPlatformDir>true</copyWithPlatformDir>
+                                    <executable>cargo</executable>
+                                    <workingDirectory>${project.basedir}/src/main/rust</workingDirectory>
+                                    <arguments>
+                                        <argument>build</argument>
+                                        <argument>--release</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- 2. Copy the .wasm into target/classes so it lands on the classpath -->
+                    <plugin>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>copy-wasm-to-classes</id>
+                                <phase>process-sources</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <mkdir dir="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst"/>
+                                        <copy
+                                            file="${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm"
+                                            tofile="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst/java_typst.wasm"/>
+                                    </target>
                                 </configuration>
                             </execution>
                         </executions>
