@@ -1,25 +1,31 @@
+use std::alloc::Layout;
 use std::cell::RefCell;
 use typst_as_lib::TypstEngine;
 use typst_pdf::PdfOptions;
 
 thread_local! {
-    static LAST_ERROR: RefCell<Vec<u8>> = RefCell::new(Vec::new());
+    static LAST_ERROR: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 #[no_mangle]
 pub extern "C" fn alloc(len: u32) -> *mut u8 {
-    let mut buf = Vec::<u8>::with_capacity(len as usize);
-    unsafe { buf.set_len(len as usize) };
-    let ptr = buf.as_mut_ptr();
-    std::mem::forget(buf);
-    ptr
+    let layout = Layout::array::<u8>(len as usize).unwrap();
+    unsafe { std::alloc::alloc(layout) }
 }
 
+/// # Safety
+/// `ptr` must have been returned by `alloc(len)` and not yet freed.
 #[no_mangle]
 pub unsafe extern "C" fn dealloc(ptr: *mut u8, len: u32) {
-    drop(Vec::from_raw_parts(ptr, len as usize, len as usize));
+    let layout = Layout::array::<u8>(len as usize).unwrap();
+    std::alloc::dealloc(ptr, layout);
 }
 
+/// # Safety
+/// - `in_ptr` must point to `in_len` valid bytes in linear memory
+/// - `out_len` must point to a 4-byte writable location (allocated via `alloc(4)`)
+/// - The returned pointer, if non-null, must be freed via `dealloc(ptr, *out_len)`
+/// - The error string at `last_error_ptr()` is valid only until the next `render()` call
 #[no_mangle]
 pub unsafe extern "C" fn render(
     in_ptr: *const u8,
@@ -28,15 +34,24 @@ pub unsafe extern "C" fn render(
 ) -> *mut u8 {
     let source = {
         let slice = std::slice::from_raw_parts(in_ptr, in_len as usize);
-        String::from_utf8_lossy(slice).into_owned()
+        match String::from_utf8(slice.to_vec()) {
+            Ok(s) => s,
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = e.to_string().into_bytes());
+                return std::ptr::null_mut();
+            }
+        }
     };
 
     match compile(source) {
-        Ok(mut pdf) => {
-            *out_len = pdf.len() as u32;
-            let ptr = pdf.as_mut_ptr();
-            std::mem::forget(pdf);
-            ptr
+        Ok(pdf) => {
+            let pdf_len = pdf.len();
+            *out_len = pdf_len as u32;
+            let ptr = alloc(pdf_len as u32);
+            if !ptr.is_null() {
+                std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
+            }
+            ptr // pdf Vec drops here, freeing its original memory via Vec's allocator
         }
         Err(msg) => {
             LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
@@ -60,7 +75,7 @@ fn compile(source: String) -> Result<Vec<u8>, String> {
         .main_file(source)
         .build();
 
-    let doc: typst::layout::PagedDocument = engine
+    let doc = engine
         .compile()
         .output
         .map_err(|e| format!("{e}"))?;

@@ -1050,7 +1050,6 @@ checksum = "d75a2a4b1b190afb6f5425f10f6a8f959d2ea0b9c2b1d79553551850539e4674"
 name = "java-typst"
 version = "2.0.0"
 dependencies = [
- "typst",
  "typst-as-lib",
  "typst-pdf",
 ]
