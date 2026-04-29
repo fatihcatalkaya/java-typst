@@ -6,6 +6,10 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import io.github.fatihcatalkaya.javatypst.TypstRenderException;
 
 public class BasicTest {
 
@@ -21,5 +25,25 @@ public class BasicTest {
     PDFTextStripper stripper = new PDFTextStripper();
     String parsedPdfText = stripper.getText(doc);
     assertEquals(EXPECTED_PDF_TEXT, parsedPdfText);
+  }
+
+  @Test
+  public void testInvalidMarkupThrowsException() {
+    // Incomplete let expression is a hard syntax error in typst
+    TypstRenderException ex = assertThrows(
+        TypstRenderException.class,
+        () -> JavaTypst.render("#let x =")
+    );
+    assertNotNull(ex.getMessage());
+    assertFalse(ex.getMessage().isBlank());
+  }
+
+  @Test
+  public void testPackageImportProducesError() {
+    // Package resolver is not wired; @preview imports must fail cleanly
+    assertThrows(
+        TypstRenderException.class,
+        () -> JavaTypst.render("#import \"@preview/example:0.1.0\": *\n= Hello")
+    );
   }
 }
