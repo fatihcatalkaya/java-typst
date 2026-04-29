@@ -1,6 +1,8 @@
 package io.github.fatihcatalkaya.javatypst;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -9,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import io.github.fatihcatalkaya.javatypst.TypstRenderException;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 public class BasicTest {
 
@@ -45,5 +47,22 @@ public class BasicTest {
         TypstRenderException.class,
         () -> JavaTypst.render("#import \"@preview/example:0.1.0\": *\n= Hello")
     );
+  }
+
+  @Test
+  public void testDiskCacheHitAvoidsDelegateCall() throws Exception {
+    Path tmpDir = Files.createTempDirectory("javatypst-test-cache");
+    int[] callCount = {0};
+    TypstPackageResolver counting = (ns, name, ver) -> {
+      callCount[0]++;
+      return new byte[]{1, 2, 3};
+    };
+    PackageDiskCache cache = new PackageDiskCache(tmpDir);
+
+    byte[] first  = cache.get("preview", "test", "1.0.0", counting);
+    byte[] second = cache.get("preview", "test", "1.0.0", counting);
+
+    assertArrayEquals(first, second);
+    assertEquals(1, callCount[0], "resolver must be called exactly once");
   }
 }
