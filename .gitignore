@@ -36,3 +36,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### WASM build artifact (30-80 MB, built locally via cargo) ###
+src/main/resources/io/github/fatihcatalkaya/javatypst/java_typst.wasm
