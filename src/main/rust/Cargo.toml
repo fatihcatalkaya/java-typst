@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 typst-as-lib = { version = "0.15", default-features = false, features = ["typst-kit-fonts", "typst-kit-embed-fonts"] }
+typst = "0.14"
 typst-pdf = "0.14"
 tar = "0.4"
 flate2 = "1.0"
