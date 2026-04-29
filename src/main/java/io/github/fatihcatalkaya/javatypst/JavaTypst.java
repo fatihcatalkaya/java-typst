@@ -121,6 +121,7 @@ public final class JavaTypst {
 
     // ── Initialization ────────────────────────────────────────────────────────
 
+    // Caller must hold LOCK.
     private static void ensureInitialized() {
         if (instance != null) return;
         try (InputStream stream = JavaTypst.class.getResourceAsStream(
@@ -173,7 +174,7 @@ public final class JavaTypst {
             lastErrPtrFn = newInstance.export("last_error_ptr");
             lastErrLenFn = newInstance.export("last_error_len");
             instance = newInstance;
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to load java_typst.wasm", e);
         }
     }
@@ -204,6 +205,7 @@ public final class JavaTypst {
         } finally {
             deallocFn.apply(outLenPtr, 4);
             deallocFn.apply(inPtr, inLen);
+            pendingFetches.clear();
         }
     }
 
