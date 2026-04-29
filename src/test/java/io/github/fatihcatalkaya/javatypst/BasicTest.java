@@ -3,6 +3,7 @@ package io.github.fatihcatalkaya.javatypst;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -47,6 +48,13 @@ public class BasicTest {
         TypstRenderException.class,
         () -> JavaTypst.render("#import \"@preview/example:0.1.0\": *\n= Hello")
     );
+  }
+
+  @Test
+  public void testSetPackageResolverIsAccepted() {
+    TypstPackageResolver r = (ns, name, ver) -> new byte[0];
+    JavaTypst.setPackageResolver(r);
+    JavaTypst.setPackageResolver(new HttpPackageResolver()); // restore default
   }
 
   @Test
