@@ -33,8 +33,9 @@ byte[] pdf = JavaTypst.render("= Hello, World!\n_Lorem_ *ipsum*");
 ## Performance
 
 Render times are ~2–3× slower than the JNI build due to WASM interpretation.
-The Maven `rust` profile enables Chicory's build-time AOT compiler which
-narrows the gap significantly.
+The Maven `rust` profile builds the WASM module from source.
+Chicory's build-time AOT compiler was evaluated but cannot be applied to this
+module due to JVM method-size limits on the compiled typst font code.
 
 ## Building from source
 

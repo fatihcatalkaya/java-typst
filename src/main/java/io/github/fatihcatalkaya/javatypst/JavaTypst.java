@@ -14,11 +14,11 @@ import java.nio.charset.StandardCharsets;
 public final class JavaTypst {
 
     private static volatile Instance instance;
-    private static ExportFunction allocFn;
-    private static ExportFunction deallocFn;
-    private static ExportFunction renderFn;
-    private static ExportFunction lastErrPtrFn;
-    private static ExportFunction lastErrLenFn;
+    private static volatile ExportFunction allocFn;
+    private static volatile ExportFunction deallocFn;
+    private static volatile ExportFunction renderFn;
+    private static volatile ExportFunction lastErrPtrFn;
+    private static volatile ExportFunction lastErrLenFn;
 
     private static final Object LOCK = new Object();
 
@@ -48,11 +48,12 @@ public final class JavaTypst {
     /**
      * Renders Typst markup to a PDF document.
      *
-     * @param content Typst markup source
+     * @param content Typst markup source (must not be null)
      * @return PDF document as a byte array
      * @throws TypstRenderException if the Typst source fails to compile
      */
     public static byte[] render(String content) {
+        if (content == null) throw new NullPointerException("content must not be null");
         synchronized (LOCK) {
             ensureInitialized();
             Memory memory = instance.memory();
