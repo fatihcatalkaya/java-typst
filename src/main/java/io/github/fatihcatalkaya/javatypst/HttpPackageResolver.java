@@ -11,7 +11,7 @@ public final class HttpPackageResolver implements TypstPackageResolver {
     private static final String URL_TEMPLATE =
         "https://packages.typst.org/%s/%s-%s.tar.gz";
 
-    private final HttpClient http = HttpClient.newHttpClient();
+    private static final HttpClient http = HttpClient.newHttpClient();
 
     @Override
     public byte[] resolve(String namespace, String name, String version)
