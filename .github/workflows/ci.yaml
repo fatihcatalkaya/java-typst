@@ -33,7 +33,7 @@ jobs:
           java-distribution: temurin
 
       - name: Build and test
-        run: mvn -Prust verify
+        run: mvn -Prust verify -Dgpg.skip=true
 
   deploy:
     name: Publish to Maven Central
