@@ -1,12 +1,9 @@
 # Java Typst
 
-A library for rendering [Typst](https://typst.app/) markup to PDF from Java.
-
-## Requirements
-
-- **Java 17+** (upgraded from Java 8 in v2.0.0)
-- No native libraries or Rust toolchain needed at runtime — the library ships a
-  pre-built WebAssembly binary executed by [Chicory](https://chicory.dev/).
+A library for rendering [Typst](https://typst.app/) markup to PDF from Java. Internally,
+it exposes the Typst library as a webassembly module, which is then
+executed using [Chicory](https://chicory.dev/) to eliminate any runtime
+binary dependencies. It even supports online Typst packages.
 
 ## Usage
 
@@ -21,21 +18,6 @@ A library for rendering [Typst](https://typst.app/) markup to PDF from Java.
 ```java
 byte[] pdf = JavaTypst.render("= Hello, World!\n_Lorem_ *ipsum*");
 ```
-
-## Breaking changes in 2.0.0
-
-| Change | Detail |
-|--------|--------|
-| Java baseline | Java 17+ required |
-| Remote packages | `#import "@preview/..."` is **not supported** and throws `TypstRenderException`. |
-| Exceptions | Compilation errors throw `TypstRenderException` (was `RuntimeException`). |
-
-## Performance
-
-Render times are ~2–3× slower than the JNI build due to WASM interpretation.
-The Maven `rust` profile builds the WASM module from source.
-Chicory's build-time AOT compiler was evaluated but cannot be applied to this
-module due to JVM method-size limits on the compiled typst font code.
 
 ## Building from source
 
