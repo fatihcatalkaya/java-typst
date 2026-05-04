@@ -79,7 +79,9 @@
                             <execution>
                                 <id>cargo-build-wasm</id>
                                 <phase>generate-sources</phase>
-                                <goals><goal>exec</goal></goals>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
                                 <configuration>
                                     <executable>cargo</executable>
                                     <workingDirectory>${project.basedir}/src/main/rust</workingDirectory>
@@ -92,14 +94,20 @@
                             <execution>
                                 <id>wasm-opt</id>
                                 <phase>generate-sources</phase>
-                                <goals><goal>exec</goal></goals>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
                                 <configuration>
                                     <executable>wasm-opt</executable>
                                     <arguments>
                                         <argument>-Oz</argument>
                                         <argument>-o</argument>
-                                        <argument>${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm</argument>
-                                        <argument>${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm</argument>
+                                        <argument>
+                                            ${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst_opt.wasm
+                                        </argument>
+                                        <argument>
+                                            ${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm
+                                        </argument>
                                     </arguments>
                                 </configuration>
                             </execution>
@@ -113,13 +121,15 @@
                             <execution>
                                 <id>copy-wasm-to-classes</id>
                                 <phase>process-sources</phase>
-                                <goals><goal>run</goal></goals>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
                                 <configuration>
                                     <target>
                                         <mkdir dir="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst"/>
                                         <copy
-                                            file="${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm"
-                                            tofile="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst/java_typst.wasm"/>
+                                                file="${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst_opt.wasm"
+                                                tofile="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst/java_typst.wasm"/>
                                     </target>
                                 </configuration>
                             </execution>
@@ -136,29 +146,13 @@
                                     <goal>compile</goal>
                                 </goals>
                                 <configuration>
-                                    <wasmFile>${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm</wasmFile>
+                                    <wasmFile>
+                                        ${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst_opt.wasm
+                                    </wasmFile>
                                     <name>io.github.fatihcatalkaya.javatypst.JavaTypstModule</name>
-                                    <moduleInterface>io.github.fatihcatalkaya.javatypst.JavaTypstInterface</moduleInterface>
-                                    <interpreterFallback>FAIL</interpreterFallback>
-                                    <interpretedFunctions>
-                                        <function>214</function>
-                                        <function>215</function>
-                                        <function>1498</function>
-                                        <function>2524</function>
-                                        <function>2884</function>
-                                        <function>4832</function>
-                                        <function>5812</function>
-                                        <function>6440</function>
-                                        <function>7435</function>
-                                        <function>10739</function>
-                                        <function>10855</function>
-                                        <function>13154</function>
-                                        <function>14874</function>
-                                        <function>15432</function>
-                                        <function>15955</function>
-                                        <function>16540</function>
-                                        <function>22383</function>
-                                    </interpretedFunctions>
+                                    <moduleInterface>io.github.fatihcatalkaya.javatypst.JavaTypstInterface
+                                    </moduleInterface>
+                                    <interpreterFallback>WARN</interpreterFallback>
                                 </configuration>
                             </execution>
                         </executions>
