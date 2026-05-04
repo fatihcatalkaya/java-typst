@@ -89,6 +89,20 @@
                                     </arguments>
                                 </configuration>
                             </execution>
+                            <execution>
+                                <id>wasm-opt</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>exec</goal></goals>
+                                <configuration>
+                                    <executable>wasm-opt</executable>
+                                    <arguments>
+                                        <argument>-Oz</argument>
+                                        <argument>-o</argument>
+                                        <argument>${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm</argument>
+                                        <argument>${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
                     <!-- 2. Copy the .wasm into target/classes so it lands on the classpath -->
