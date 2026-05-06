@@ -27,3 +27,5 @@ Requires a Rust toolchain with the `wasm32-wasip1` target:
 rustup target add wasm32-wasip1
 mvn -Prust package
 ```
+
+Additionally, an installation of [wasm-opt](https://github.com/WebAssembly/binaryen) must be available.

@@ -33,7 +33,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <chicory.version>1.4.0</chicory.version>
+        <chicory.version>1.7.5</chicory.version>
     </properties>
 
     <dependencies>
@@ -79,13 +79,35 @@
                             <execution>
                                 <id>cargo-build-wasm</id>
                                 <phase>generate-sources</phase>
-                                <goals><goal>exec</goal></goals>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
                                 <configuration>
                                     <executable>cargo</executable>
                                     <workingDirectory>${project.basedir}/src/main/rust</workingDirectory>
                                     <arguments>
                                         <argument>build</argument>
                                         <argument>--release</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>wasm-opt</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>wasm-opt</executable>
+                                    <arguments>
+                                        <argument>-Oz</argument>
+                                        <argument>-o</argument>
+                                        <argument>
+                                            ${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst_opt.wasm
+                                        </argument>
+                                        <argument>
+                                            ${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm
+                                        </argument>
                                     </arguments>
                                 </configuration>
                             </execution>
@@ -99,14 +121,38 @@
                             <execution>
                                 <id>copy-wasm-to-classes</id>
                                 <phase>process-sources</phase>
-                                <goals><goal>run</goal></goals>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
                                 <configuration>
                                     <target>
                                         <mkdir dir="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst"/>
                                         <copy
-                                            file="${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst.wasm"
-                                            tofile="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst/java_typst.wasm"/>
+                                                file="${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst_opt.wasm"
+                                                tofile="${project.build.outputDirectory}/io/github/fatihcatalkaya/javatypst/java_typst.wasm"/>
                                     </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>com.dylibso.chicory</groupId>
+                        <artifactId>chicory-compiler-maven-plugin</artifactId>
+                        <version>${chicory.version}</version>
+                        <executions>
+                            <execution>
+                                <id>compiler-gen</id>
+                                <goals>
+                                    <goal>compile</goal>
+                                </goals>
+                                <configuration>
+                                    <wasmFile>
+                                        ${project.basedir}/src/main/rust/target/wasm32-wasip1/release/java_typst_opt.wasm
+                                    </wasmFile>
+                                    <name>io.github.fatihcatalkaya.javatypst.JavaTypstModule</name>
+                                    <moduleInterface>io.github.fatihcatalkaya.javatypst.JavaTypstInterface
+                                    </moduleInterface>
+                                    <interpreterFallback>WARN</interpreterFallback>
                                 </configuration>
                             </execution>
                         </executions>
@@ -181,6 +227,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.6.3</version>
+                <configuration>
+                    <sourcepath>${project.build.sourceDirectory}</sourcepath>
+                </configuration>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>

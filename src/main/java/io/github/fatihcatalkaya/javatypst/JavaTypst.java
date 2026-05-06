@@ -2,6 +2,7 @@ package io.github.fatihcatalkaya.javatypst;
 
 import com.dylibso.chicory.runtime.ExportFunction;
 import com.dylibso.chicory.runtime.HostFunction;
+import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.Memory;
 import com.dylibso.chicory.runtime.Store;
@@ -30,6 +31,8 @@ public final class JavaTypst {
     private static volatile ExportFunction lastErrLenFn;
 
     private static final Object LOCK = new Object();
+
+    private static volatile boolean aotEnabled = false;
 
     // ── Package resolution configuration ─────────────────────────────────────
 
@@ -70,6 +73,32 @@ public final class JavaTypst {
                 throw new IllegalStateException("setPackageCacheDirectory must be called before the first render");
             }
             packageCacheDir = dir;
+        }
+    }
+
+    /**
+     * Switches to the AOT-compiled machine. Must be called before the first {@link #render}.
+     */
+    public static void enableAot() {
+        synchronized (LOCK) {
+            if (instance != null) {
+                throw new IllegalStateException("enableAot must be called before the first render");
+            }
+            aotEnabled = true;
+        }
+    }
+
+    /** Tears down the current instance so it will be re-initialized on the next render. For testing only. */
+    static void reset() {
+        synchronized (LOCK) {
+            instance = null;
+            allocFn = null;
+            deallocFn = null;
+            renderFn = null;
+            lastErrPtrFn = null;
+            lastErrLenFn = null;
+            aotEnabled = false;
+            diskCache = null;
         }
     }
 
@@ -121,12 +150,7 @@ public final class JavaTypst {
     // Caller must hold LOCK.
     private static void ensureInitialized() {
         if (instance != null) return;
-        try (InputStream stream =
-                JavaTypst.class.getResourceAsStream("/io/github/fatihcatalkaya/javatypst/java_typst.wasm")) {
-            if (stream == null) {
-                throw new RuntimeException("java_typst.wasm not found on classpath");
-            }
-
+        try {
             diskCache = new PackageDiskCache(packageCacheDir);
 
             var wasi = WasiPreview1.builder()
@@ -158,9 +182,25 @@ public final class JavaTypst {
                         return new long[] {len};
                     });
 
-            var store = new Store().addFunction(wasi.toHostFunctions()).addFunction(fetchFn);
+            Instance newInstance;
+            if (aotEnabled) {
+                var imports = ImportValues.builder()
+                        .addFunction(wasi.toHostFunctions())
+                        .addFunction(fetchFn)
+                        .build();
+                newInstance = Instance.builder(JavaTypstModule.load())
+                        .withMachineFactory(JavaTypstModule::create)
+                        .withImportValues(imports)
+                        .build();
+            } else {
+                try (InputStream stream =
+                        JavaTypst.class.getResourceAsStream("/io/github/fatihcatalkaya/javatypst/java_typst.wasm")) {
+                    if (stream == null) throw new RuntimeException("java_typst.wasm not found on classpath");
+                    var store = new Store().addFunction(wasi.toHostFunctions()).addFunction(fetchFn);
+                    newInstance = store.instantiate("java-typst", Parser.parse(stream));
+                }
+            }
 
-            Instance newInstance = store.instantiate("java-typst", Parser.parse(stream));
             allocFn = newInstance.export("alloc");
             deallocFn = newInstance.export("dealloc");
             renderFn = newInstance.export("render");
@@ -168,7 +208,7 @@ public final class JavaTypst {
             lastErrLenFn = newInstance.export("last_error_len");
             instance = newInstance;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load java_typst.wasm", e);
+            throw new RuntimeException("Failed to initialize JavaTypst", e);
         }
     }
 
