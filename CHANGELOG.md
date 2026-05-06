@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/fatihcatalkaya/java-typst/compare/2.0.0...2.1.0) (2026-05-06)
+
+
+### Features
+
+* use Chicory AOT compilation of Typst module ([#8](https://github.com/fatihcatalkaya/java-typst/issues/8)) ([d6c8fe5](https://github.com/fatihcatalkaya/java-typst/commit/d6c8fe5e24154d50f7c04f12c6821429592e53fe))
+
 # [2.0.0](https://github.com/fatihcatalkaya/java-typst/compare/1.4.0...2.0.0) (2026-05-01)
 
 
