@@ -53,11 +53,6 @@
             <version>${chicory.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.dylibso.chicory</groupId>
-            <artifactId>annotations</artifactId>
-            <version>${chicory.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>5.10.3</version>
@@ -232,6 +227,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.6.3</version>
+                <configuration>
+                    <sourcepath>${project.build.sourceDirectory}</sourcepath>
+                </configuration>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
