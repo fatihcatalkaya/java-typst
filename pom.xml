@@ -53,6 +53,11 @@
             <version>${chicory.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.dylibso.chicory</groupId>
+            <artifactId>annotations</artifactId>
+            <version>${chicory.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>5.10.3</version>
