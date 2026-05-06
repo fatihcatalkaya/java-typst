@@ -193,8 +193,8 @@ public final class JavaTypst {
                         .withImportValues(imports)
                         .build();
             } else {
-                try (InputStream stream = JavaTypst.class.getResourceAsStream(
-                        "/io/github/fatihcatalkaya/javatypst/java_typst.wasm")) {
+                try (InputStream stream =
+                        JavaTypst.class.getResourceAsStream("/io/github/fatihcatalkaya/javatypst/java_typst.wasm")) {
                     if (stream == null) throw new RuntimeException("java_typst.wasm not found on classpath");
                     var store = new Store().addFunction(wasi.toHostFunctions()).addFunction(fetchFn);
                     newInstance = store.instantiate("java-typst", Parser.parse(stream));
