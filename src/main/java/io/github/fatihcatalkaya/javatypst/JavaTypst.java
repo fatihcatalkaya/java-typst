@@ -11,6 +11,7 @@ import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.types.FunctionType;
 import com.dylibso.chicory.wasm.types.ValType;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -27,6 +28,7 @@ public final class JavaTypst {
     private static volatile ExportFunction allocFn;
     private static volatile ExportFunction deallocFn;
     private static volatile ExportFunction renderFn;
+    private static volatile ExportFunction renderWithInputsFn;
     private static volatile ExportFunction lastErrPtrFn;
     private static volatile ExportFunction lastErrLenFn;
 
@@ -95,6 +97,7 @@ public final class JavaTypst {
             allocFn = null;
             deallocFn = null;
             renderFn = null;
+            renderWithInputsFn = null;
             lastErrPtrFn = null;
             lastErrLenFn = null;
             aotEnabled = false;
@@ -142,6 +145,28 @@ public final class JavaTypst {
             } finally {
                 currentPackageUrlMap = null;
             }
+        }
+    }
+
+    /**
+     * Renders Typst markup with a dictionary of inputs exposed to the document as {@code sys.inputs}.
+     *
+     * <p>Each entry becomes a string-valued field of {@code sys.inputs}, mirroring the
+     * {@code --input key=value} command-line flag of the Typst CLI. Inside the document the values
+     * are reachable via {@code sys.inputs.at("key")} (or after {@code #import sys: inputs}).
+     *
+     * @param content Typst source (must not be null)
+     * @param inputs  map of input names to string values exposed as {@code sys.inputs}; must not be
+     *                null (may be empty), and neither its keys nor its values may be null
+     * @return PDF as a byte array
+     * @throws TypstRenderException if compilation fails
+     */
+    public static byte[] renderWithInputs(String content, Map<String, String> inputs) {
+        if (content == null) throw new NullPointerException("content");
+        if (inputs == null) throw new NullPointerException("inputs");
+        byte[] encodedInputs = encodeInputs(inputs);
+        synchronized (LOCK) {
+            return renderWithInputsUnderLock(content, encodedInputs);
         }
     }
 
@@ -204,6 +229,7 @@ public final class JavaTypst {
             allocFn = newInstance.export("alloc");
             deallocFn = newInstance.export("dealloc");
             renderFn = newInstance.export("render");
+            renderWithInputsFn = newInstance.export("render_with_inputs");
             lastErrPtrFn = newInstance.export("last_error_ptr");
             lastErrLenFn = newInstance.export("last_error_len");
             instance = newInstance;
@@ -240,6 +266,68 @@ public final class JavaTypst {
             deallocFn.apply(inPtr, inLen);
             pendingFetches.clear();
         }
+    }
+
+    private static byte[] renderWithInputsUnderLock(String content, byte[] encodedInputs) {
+        ensureInitialized();
+        Memory memory = instance.memory();
+
+        byte[] srcBytes = content.getBytes(StandardCharsets.UTF_8);
+        int srcLen = srcBytes.length;
+        int inputsLen = encodedInputs.length;
+        int srcPtr = (int) allocFn.apply(srcLen)[0];
+        int inputsPtr = (int) allocFn.apply(inputsLen)[0];
+        int outLenPtr = (int) allocFn.apply(4)[0];
+        try {
+            memory.write(srcPtr, srcBytes);
+            memory.write(inputsPtr, encodedInputs);
+            int outPtr = (int) renderWithInputsFn.apply(srcPtr, srcLen, inputsPtr, inputsLen, outLenPtr)[0];
+            if (outPtr == 0) {
+                int errPtr = (int) lastErrPtrFn.apply()[0];
+                int errLen = (int) lastErrLenFn.apply()[0];
+                String errorMsg = memory.readString(errPtr, errLen);
+                throw new TypstRenderException(errorMsg);
+            }
+            int outLen = memory.readInt(outLenPtr);
+            byte[] pdfBytes = memory.readBytes(outPtr, outLen);
+            deallocFn.apply(outPtr, outLen);
+            return pdfBytes;
+        } finally {
+            deallocFn.apply(outLenPtr, 4);
+            deallocFn.apply(inputsPtr, inputsLen);
+            deallocFn.apply(srcPtr, srcLen);
+            pendingFetches.clear();
+        }
+    }
+
+    /**
+     * Encodes an inputs map into the wire format consumed by the {@code render_with_inputs} WASM
+     * export: a little-endian {@code u32} entry count, then for each entry a length-prefixed UTF-8
+     * key followed by a length-prefixed UTF-8 value.
+     */
+    private static byte[] encodeInputs(Map<String, String> inputs) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        writeLittleEndianInt(out, inputs.size());
+        for (Map.Entry<String, String> entry : inputs.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key == null) throw new NullPointerException("input key must not be null");
+            if (value == null) throw new NullPointerException("input value must not be null (key: " + key + ")");
+            byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
+            byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
+            writeLittleEndianInt(out, keyBytes.length);
+            out.writeBytes(keyBytes);
+            writeLittleEndianInt(out, valueBytes.length);
+            out.writeBytes(valueBytes);
+        }
+        return out.toByteArray();
+    }
+
+    private static void writeLittleEndianInt(ByteArrayOutputStream out, int value) {
+        out.write(value & 0xFF);
+        out.write((value >>> 8) & 0xFF);
+        out.write((value >>> 16) & 0xFF);
+        out.write((value >>> 24) & 0xFF);
     }
 
     private static byte[] fetchPackage(String url) throws TypstPackageNotFoundException {

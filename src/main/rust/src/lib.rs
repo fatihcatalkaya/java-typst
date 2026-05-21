@@ -8,7 +8,7 @@ use std::ptr;
 use flate2::read::GzDecoder;
 use tar::Archive;
 use typst::diag::{FileError, FileResult};
-use typst::foundations::Bytes;
+use typst::foundations::{Bytes, Dict, Value};
 use typst::syntax::{FileId, Source};
 use typst_as_lib::file_resolver::FileResolver;
 use typst_as_lib::typst_kit_options::TypstKitFontOptions;
@@ -78,7 +78,63 @@ pub unsafe extern "C" fn render(in_ptr: *const u8, in_len: u32, out_len: *mut u3
         }
     };
 
-    match compile(source) {
+    match compile(source, None) {
+        Ok(pdf) => {
+            let pdf_len = pdf.len();
+            *out_len = pdf_len as u32;
+            let ptr = alloc(pdf_len as u32);
+            if !ptr.is_null() {
+                std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
+            }
+            ptr
+        }
+        Err(msg) => {
+            LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Renders Typst markup to PDF with a dictionary of inputs exposed as `sys.inputs`.
+///
+/// # Safety
+/// - `src_ptr` must point to `src_len` valid UTF-8 bytes (the Typst source) in linear memory
+/// - `inputs_ptr` must point to `inputs_len` valid bytes encoding the inputs map
+///   (see [`parse_inputs`] for the layout)
+/// - `out_len` must point to a 4-byte writable location (allocated via `alloc(4)`)
+/// - The returned pointer, if non-null, must be freed via `dealloc(ptr, *out_len)`
+/// - The error string at `last_error_ptr()` is valid only until the next render call
+#[no_mangle]
+pub unsafe extern "C" fn render_with_inputs(
+    src_ptr: *const u8,
+    src_len: u32,
+    inputs_ptr: *const u8,
+    inputs_len: u32,
+    out_len: *mut u32,
+) -> *mut u8 {
+    let source = {
+        let slice = std::slice::from_raw_parts(src_ptr, src_len as usize);
+        match String::from_utf8(slice.to_vec()) {
+            Ok(s) => s,
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = e.to_string().into_bytes());
+                return std::ptr::null_mut();
+            }
+        }
+    };
+
+    let inputs = {
+        let slice = std::slice::from_raw_parts(inputs_ptr, inputs_len as usize);
+        match parse_inputs(slice) {
+            Ok(dict) => dict,
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = e.into_bytes());
+                return std::ptr::null_mut();
+            }
+        }
+    };
+
+    match compile(source, Some(inputs)) {
         Ok(pdf) => {
             let pdf_len = pdf.len();
             *out_len = pdf_len as u32;
@@ -107,7 +163,7 @@ pub extern "C" fn last_error_len() -> u32 {
 
 // ── Compilation ──────────────────────────────────────────────────────────────
 
-fn compile(source: String) -> Result<Vec<u8>, String> {
+fn compile(source: String, inputs: Option<Dict>) -> Result<Vec<u8>, String> {
     let font_options = TypstKitFontOptions::new()
         .include_system_fonts(false)
         .include_embedded_fonts(true);
@@ -117,13 +173,70 @@ fn compile(source: String) -> Result<Vec<u8>, String> {
         .add_file_resolver(HostFetchResolver)
         .build();
 
-    let doc = engine
-        .compile()
-        .output
-        .map_err(|e| format!("{e}"))?;
+    // `compile_with_input` accepts anything implementing `Into<Dict>`; a `Dict`
+    // converts into itself. Without inputs, `sys.inputs` keeps its default value.
+    let doc = match inputs {
+        Some(dict) => engine.compile_with_input(dict),
+        None => engine.compile(),
+    }
+    .output
+    .map_err(|e| format!("{e}"))?;
 
     typst_pdf::pdf(&doc, &PdfOptions::default())
         .map_err(|errors| format!("{errors:?}"))
+}
+
+// ── Inputs decoding ──────────────────────────────────────────────────────────
+
+/// Decodes the `sys.inputs` dictionary from the wire format produced by the Java host:
+///
+/// ```text
+/// count: u32                          then, repeated `count` times:
+///   key_len: u32   key:   key_len UTF-8 bytes
+///   val_len: u32   value: val_len UTF-8 bytes
+/// ```
+///
+/// All integers are little-endian. Every value becomes a Typst string, mirroring the
+/// `--input key=value` semantics of the Typst CLI.
+fn parse_inputs(bytes: &[u8]) -> Result<Dict, String> {
+    let mut dict = Dict::new();
+    let mut pos = 0usize;
+    let count = read_u32(bytes, &mut pos)?;
+    for _ in 0..count {
+        let key = read_str(bytes, &mut pos)?;
+        let value = read_str(bytes, &mut pos)?;
+        dict.insert(key.into(), Value::Str(value.into()));
+    }
+    Ok(dict)
+}
+
+/// Reads a little-endian `u32` at `*pos`, advancing `pos` past it.
+fn read_u32(bytes: &[u8], pos: &mut usize) -> Result<u32, String> {
+    let end = pos
+        .checked_add(4)
+        .ok_or_else(|| "inputs: length overflow".to_string())?;
+    let slice = bytes
+        .get(*pos..end)
+        .ok_or_else(|| "inputs: unexpected end of buffer".to_string())?;
+    let value = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]);
+    *pos = end;
+    Ok(value)
+}
+
+/// Reads a length-prefixed UTF-8 string at `*pos`, advancing `pos` past it.
+fn read_str(bytes: &[u8], pos: &mut usize) -> Result<String, String> {
+    let len = read_u32(bytes, pos)? as usize;
+    let end = pos
+        .checked_add(len)
+        .ok_or_else(|| "inputs: length overflow".to_string())?;
+    let slice = bytes
+        .get(*pos..end)
+        .ok_or_else(|| "inputs: unexpected end of buffer".to_string())?;
+    let value = std::str::from_utf8(slice)
+        .map_err(|e| format!("inputs: invalid UTF-8: {e}"))?
+        .to_string();
+    *pos = end;
+    Ok(value)
 }
 
 // ── HostFetchResolver ────────────────────────────────────────────────────────
