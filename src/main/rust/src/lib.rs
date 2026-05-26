@@ -78,7 +78,7 @@ pub unsafe extern "C" fn render(in_ptr: *const u8, in_len: u32, out_len: *mut u3
         }
     };
 
-    match compile(source, None) {
+    match compile(source, None, Vec::new()) {
         Ok(pdf) => {
             let pdf_len = pdf.len();
             *out_len = pdf_len as u32;
@@ -134,7 +134,66 @@ pub unsafe extern "C" fn render_with_inputs(
         }
     };
 
-    match compile(source, Some(inputs)) {
+    match compile(source, Some(inputs), Vec::new()) {
+        Ok(pdf) => {
+            let pdf_len = pdf.len();
+            *out_len = pdf_len as u32;
+            let ptr = alloc(pdf_len as u32);
+            if !ptr.is_null() {
+                std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
+            }
+            ptr
+        }
+        Err(msg) => {
+            LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Renders Typst markup to PDF with a list of custom font files added to the engine.
+///
+/// Fonts are merged with the typst-kit embedded fonts; family names in the custom list
+/// shadow embedded ones (typst-as-lib pushes custom fonts into the book first).
+///
+/// # Safety
+/// - `src_ptr` must point to `src_len` valid UTF-8 bytes (the Typst source) in linear memory
+/// - `fonts_ptr` must point to `fonts_len` valid bytes encoding the font list
+///   (see [`parse_fonts`] for the layout)
+/// - `out_len` must point to a 4-byte writable location (allocated via `alloc(4)`)
+/// - The returned pointer, if non-null, must be freed via `dealloc(ptr, *out_len)`
+/// - The error string at `last_error_ptr()` is valid only until the next render call
+#[no_mangle]
+pub unsafe extern "C" fn render_with_fonts(
+    src_ptr: *const u8,
+    src_len: u32,
+    fonts_ptr: *const u8,
+    fonts_len: u32,
+    out_len: *mut u32,
+) -> *mut u8 {
+    let source = {
+        let slice = std::slice::from_raw_parts(src_ptr, src_len as usize);
+        match String::from_utf8(slice.to_vec()) {
+            Ok(s) => s,
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = e.to_string().into_bytes());
+                return std::ptr::null_mut();
+            }
+        }
+    };
+
+    let fonts = {
+        let slice = std::slice::from_raw_parts(fonts_ptr, fonts_len as usize);
+        match parse_fonts(slice) {
+            Ok(f) => f,
+            Err(e) => {
+                LAST_ERROR.with(|err| *err.borrow_mut() = e.into_bytes());
+                return std::ptr::null_mut();
+            }
+        }
+    };
+
+    match compile(source, None, fonts) {
         Ok(pdf) => {
             let pdf_len = pdf.len();
             *out_len = pdf_len as u32;
@@ -163,14 +222,21 @@ pub extern "C" fn last_error_len() -> u32 {
 
 // ── Compilation ──────────────────────────────────────────────────────────────
 
-fn compile(source: String, inputs: Option<Dict>) -> Result<Vec<u8>, String> {
+fn compile(
+    source: String,
+    inputs: Option<Dict>,
+    fonts: Vec<Vec<u8>>,
+) -> Result<Vec<u8>, String> {
     let font_options = TypstKitFontOptions::new()
         .include_system_fonts(false)
         .include_embedded_fonts(true);
+    // `.fonts(...)` accepts any `IntoIterator<Item: IntoFonts>`; passing an empty
+    // vec leaves the typst-kit embedded fonts as the only source.
     let engine = TypstEngine::builder()
         .main_file(source)
         .search_fonts_with(font_options)
         .add_file_resolver(HostFetchResolver)
+        .fonts(fonts)
         .build();
 
     // `compile_with_input` accepts anything implementing `Into<Dict>`; a `Dict`
@@ -237,6 +303,35 @@ fn read_str(bytes: &[u8], pos: &mut usize) -> Result<String, String> {
         .to_string();
     *pos = end;
     Ok(value)
+}
+
+// ── Fonts decoding ───────────────────────────────────────────────────────────
+
+/// Decodes the custom fonts list from the wire format produced by the Java host:
+///
+/// ```text
+/// count: u32                          then, repeated `count` times:
+///   font_len: u32   font_bytes: font_len raw OTF/TTF/TTC bytes
+/// ```
+///
+/// All integers are little-endian. Each entry is a complete font file as accepted by
+/// typst's `Font::iter` (single-face OTF/TTF or a multi-face TTC).
+fn parse_fonts(bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    let mut pos = 0usize;
+    let count = read_u32(bytes, &mut pos)?;
+    let mut fonts = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let len = read_u32(bytes, &mut pos)? as usize;
+        let end = pos
+            .checked_add(len)
+            .ok_or_else(|| "fonts: length overflow".to_string())?;
+        let slice = bytes
+            .get(pos..end)
+            .ok_or_else(|| "fonts: unexpected end of buffer".to_string())?;
+        fonts.push(slice.to_vec());
+        pos = end;
+    }
+    Ok(fonts)
 }
 
 // ── HostFetchResolver ────────────────────────────────────────────────────────

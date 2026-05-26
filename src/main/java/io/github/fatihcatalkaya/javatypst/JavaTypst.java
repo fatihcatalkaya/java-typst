@@ -29,6 +29,7 @@ public final class JavaTypst {
     private static volatile ExportFunction deallocFn;
     private static volatile ExportFunction renderFn;
     private static volatile ExportFunction renderWithInputsFn;
+    private static volatile ExportFunction renderWithFontsFn;
     private static volatile ExportFunction lastErrPtrFn;
     private static volatile ExportFunction lastErrLenFn;
 
@@ -98,6 +99,7 @@ public final class JavaTypst {
             deallocFn = null;
             renderFn = null;
             renderWithInputsFn = null;
+            renderWithFontsFn = null;
             lastErrPtrFn = null;
             lastErrLenFn = null;
             aotEnabled = false;
@@ -170,6 +172,31 @@ public final class JavaTypst {
         }
     }
 
+    /**
+     * Renders Typst markup with a list of custom font files (raw OTF/TTF/TTC bytes) added to the
+     * engine in addition to the typst-kit embedded fonts.
+     *
+     * <p>Unlike the typst CLI's {@code --font-path}, callers pass the actual font file bytes — no
+     * directory is scanned, no filesystem access is performed by the engine. Each entry is a
+     * complete font file; family names from the custom list shadow embedded fonts of the same
+     * family. Reference a font in the document the usual way, e.g.
+     * {@code #set text(font: "TeX Gyre Cursor")}.
+     *
+     * @param content Typst source (must not be null)
+     * @param fonts   list of raw font file contents; must not be null (may be empty), and no entry
+     *                may be null
+     * @return PDF as a byte array
+     * @throws TypstRenderException if compilation fails
+     */
+    public static byte[] renderWithFonts(String content, List<byte[]> fonts) {
+        if (content == null) throw new NullPointerException("content");
+        if (fonts == null) throw new NullPointerException("fonts");
+        byte[] encodedFonts = encodeFonts(fonts);
+        synchronized (LOCK) {
+            return renderWithFontsUnderLock(content, encodedFonts);
+        }
+    }
+
     // ── Initialization ────────────────────────────────────────────────────────
 
     // Caller must hold LOCK.
@@ -230,6 +257,7 @@ public final class JavaTypst {
             deallocFn = newInstance.export("dealloc");
             renderFn = newInstance.export("render");
             renderWithInputsFn = newInstance.export("render_with_inputs");
+            renderWithFontsFn = newInstance.export("render_with_fonts");
             lastErrPtrFn = newInstance.export("last_error_ptr");
             lastErrLenFn = newInstance.export("last_error_len");
             instance = newInstance;
@@ -328,6 +356,54 @@ public final class JavaTypst {
         out.write((value >>> 8) & 0xFF);
         out.write((value >>> 16) & 0xFF);
         out.write((value >>> 24) & 0xFF);
+    }
+
+    private static byte[] renderWithFontsUnderLock(String content, byte[] encodedFonts) {
+        ensureInitialized();
+        Memory memory = instance.memory();
+
+        byte[] srcBytes = content.getBytes(StandardCharsets.UTF_8);
+        int srcLen = srcBytes.length;
+        int fontsLen = encodedFonts.length;
+        int srcPtr = (int) allocFn.apply(srcLen)[0];
+        int fontsPtr = (int) allocFn.apply(fontsLen)[0];
+        int outLenPtr = (int) allocFn.apply(4)[0];
+        try {
+            memory.write(srcPtr, srcBytes);
+            memory.write(fontsPtr, encodedFonts);
+            int outPtr = (int) renderWithFontsFn.apply(srcPtr, srcLen, fontsPtr, fontsLen, outLenPtr)[0];
+            if (outPtr == 0) {
+                int errPtr = (int) lastErrPtrFn.apply()[0];
+                int errLen = (int) lastErrLenFn.apply()[0];
+                String errorMsg = memory.readString(errPtr, errLen);
+                throw new TypstRenderException(errorMsg);
+            }
+            int outLen = memory.readInt(outLenPtr);
+            byte[] pdfBytes = memory.readBytes(outPtr, outLen);
+            deallocFn.apply(outPtr, outLen);
+            return pdfBytes;
+        } finally {
+            deallocFn.apply(outLenPtr, 4);
+            deallocFn.apply(fontsPtr, fontsLen);
+            deallocFn.apply(srcPtr, srcLen);
+            pendingFetches.clear();
+        }
+    }
+
+    /**
+     * Encodes a list of font files into the wire format consumed by the {@code render_with_fonts}
+     * WASM export: a little-endian {@code u32} entry count, then for each entry a little-endian
+     * {@code u32} length followed by that many raw font bytes.
+     */
+    private static byte[] encodeFonts(List<byte[]> fonts) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        writeLittleEndianInt(out, fonts.size());
+        for (byte[] font : fonts) {
+            if (font == null) throw new NullPointerException("font bytes must not be null");
+            writeLittleEndianInt(out, font.length);
+            out.writeBytes(font);
+        }
+        return out.toByteArray();
     }
 
     private static byte[] fetchPackage(String url) throws TypstPackageNotFoundException {

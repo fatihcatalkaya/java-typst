@@ -158,7 +158,7 @@ public class InputsTest {
 
     @Test
     void largeValueRoundTrips() throws IOException {
-        String largeValue = "x".repeat(1_000_000);  // 1MB
+        String largeValue = "x".repeat(1_000_000); // 1MB
         String template = "#(sys.inputs.at(\"big\").len())";
         assertEquals("1000000", renderText(template, Map.of("big", largeValue)));
     }
