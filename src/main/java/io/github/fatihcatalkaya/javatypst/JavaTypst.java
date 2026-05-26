@@ -28,8 +28,6 @@ public final class JavaTypst {
     private static volatile ExportFunction allocFn;
     private static volatile ExportFunction deallocFn;
     private static volatile ExportFunction renderFn;
-    private static volatile ExportFunction renderWithInputsFn;
-    private static volatile ExportFunction renderWithFontsFn;
     private static volatile ExportFunction lastErrPtrFn;
     private static volatile ExportFunction lastErrLenFn;
 
@@ -37,14 +35,19 @@ public final class JavaTypst {
 
     private static volatile boolean aotEnabled = false;
 
+    // ── Tag values for the TLV options blob (must mirror lib.rs) ─────────────
+
+    private static final int TAG_INPUTS = 1;
+    private static final int TAG_FONTS = 2;
+
     // ── Package resolution configuration ─────────────────────────────────────
 
     private static volatile TypstPackageResolver packageResolver = new HttpPackageResolver();
     private static volatile Path packageCacheDir = defaultCacheDir();
     private static volatile PackageDiskCache diskCache;
 
-    // Set for the duration of a render(String, Map) call (URL-keyed, map-only mode).
-    // null means: use HTTP fallback via diskCache + packageResolver.
+    // Set for the duration of a render whose options carry an air-gapped package map; null means
+    // "use the HTTP fallback via diskCache + packageResolver."
     private static Map<String, byte[]> currentPackageUrlMap = null;
 
     // Holds fetched bytes between the two-call host protocol (size-query then data-write).
@@ -98,8 +101,6 @@ public final class JavaTypst {
             allocFn = null;
             deallocFn = null;
             renderFn = null;
-            renderWithInputsFn = null;
-            renderWithFontsFn = null;
             lastErrPtrFn = null;
             lastErrLenFn = null;
             aotEnabled = false;
@@ -110,90 +111,50 @@ public final class JavaTypst {
     // ── Public render API ─────────────────────────────────────────────────────
 
     /**
-     * Renders Typst markup to a PDF document.
+     * Renders Typst markup to a PDF with default options (no {@code sys.inputs}, no custom
+     * fonts, HTTP package fallback). Shorthand for
+     * {@code render(content, RenderOptions.DEFAULT)}.
      *
      * @param content Typst source (must not be null)
      * @return PDF as a byte array
      * @throws TypstRenderException if compilation fails
      */
     public static byte[] render(String content) {
-        if (content == null) throw new NullPointerException("content");
-        synchronized (LOCK) {
-            return renderUnderLock(content);
-        }
+        return render(content, RenderOptions.DEFAULT);
     }
 
     /**
-     * Renders Typst markup with pre-fetched package archives (air-gapped / custom-cache mode).
-     * Package imports that are not present in {@code packages} cause a {@link TypstRenderException};
-     * no HTTP requests are made.
+     * Renders Typst markup to a PDF with the given options.
      *
-     * @param content  Typst source (must not be null)
-     * @param packages map of {@code "@namespace/name:version"} → raw {@code .tar.gz} bytes
+     * <p>This is the single render entry point: every optional feature — {@code sys.inputs},
+     * custom fonts, air-gapped package maps, and anything we add in the future — flows in
+     * through {@link RenderOptions}. There is no cartesian product of overloads.
+     *
+     * @param content Typst source (must not be null)
+     * @param options render options (must not be null; use {@link RenderOptions#DEFAULT} for none)
      * @return PDF as a byte array
-     * @throws TypstRenderException if compilation fails or a required package is absent from the map
+     * @throws TypstRenderException if compilation fails or a required package is absent from an
+     *                              air-gapped package map
      */
-    public static byte[] render(String content, Map<String, byte[]> packages) {
+    public static byte[] render(String content, RenderOptions options) {
         if (content == null) throw new NullPointerException("content");
-        if (packages == null) throw new NullPointerException("packages");
+        if (options == null) throw new NullPointerException("options");
+        byte[] optsBlob = encodeOptions(options);
+        Map<String, byte[]> airGappedPackages = options.packagesOrNull();
         synchronized (LOCK) {
-            Map<String, byte[]> urlMap = new HashMap<>();
-            for (Map.Entry<String, byte[]> e : packages.entrySet()) {
-                urlMap.put(specToUrl(e.getKey()), e.getValue());
+            Map<String, byte[]> urlMap = null;
+            if (airGappedPackages != null) {
+                urlMap = new HashMap<>();
+                for (Map.Entry<String, byte[]> e : airGappedPackages.entrySet()) {
+                    urlMap.put(specToUrl(e.getKey()), e.getValue());
+                }
             }
             currentPackageUrlMap = urlMap;
             try {
-                return renderUnderLock(content);
+                return renderUnderLock(content, optsBlob);
             } finally {
                 currentPackageUrlMap = null;
             }
-        }
-    }
-
-    /**
-     * Renders Typst markup with a dictionary of inputs exposed to the document as {@code sys.inputs}.
-     *
-     * <p>Each entry becomes a string-valued field of {@code sys.inputs}, mirroring the
-     * {@code --input key=value} command-line flag of the Typst CLI. Inside the document the values
-     * are reachable via {@code sys.inputs.at("key")} (or after {@code #import sys: inputs}).
-     *
-     * @param content Typst source (must not be null)
-     * @param inputs  map of input names to string values exposed as {@code sys.inputs}; must not be
-     *                null (may be empty), and neither its keys nor its values may be null
-     * @return PDF as a byte array
-     * @throws TypstRenderException if compilation fails
-     */
-    public static byte[] renderWithInputs(String content, Map<String, String> inputs) {
-        if (content == null) throw new NullPointerException("content");
-        if (inputs == null) throw new NullPointerException("inputs");
-        byte[] encodedInputs = encodeInputs(inputs);
-        synchronized (LOCK) {
-            return renderWithInputsUnderLock(content, encodedInputs);
-        }
-    }
-
-    /**
-     * Renders Typst markup with a list of custom font files (raw OTF/TTF/TTC bytes) added to the
-     * engine in addition to the typst-kit embedded fonts.
-     *
-     * <p>Unlike the typst CLI's {@code --font-path}, callers pass the actual font file bytes — no
-     * directory is scanned, no filesystem access is performed by the engine. Each entry is a
-     * complete font file; family names from the custom list shadow embedded fonts of the same
-     * family. Reference a font in the document the usual way, e.g.
-     * {@code #set text(font: "TeX Gyre Cursor")}.
-     *
-     * @param content Typst source (must not be null)
-     * @param fonts   list of raw font file contents; must not be null (may be empty), and no entry
-     *                may be null
-     * @return PDF as a byte array
-     * @throws TypstRenderException if compilation fails
-     */
-    public static byte[] renderWithFonts(String content, List<byte[]> fonts) {
-        if (content == null) throw new NullPointerException("content");
-        if (fonts == null) throw new NullPointerException("fonts");
-        byte[] encodedFonts = encodeFonts(fonts);
-        synchronized (LOCK) {
-            return renderWithFontsUnderLock(content, encodedFonts);
         }
     }
 
@@ -256,8 +217,6 @@ public final class JavaTypst {
             allocFn = newInstance.export("alloc");
             deallocFn = newInstance.export("dealloc");
             renderFn = newInstance.export("render");
-            renderWithInputsFn = newInstance.export("render_with_inputs");
-            renderWithFontsFn = newInstance.export("render_with_fonts");
             lastErrPtrFn = newInstance.export("last_error_ptr");
             lastErrLenFn = newInstance.export("last_error_len");
             instance = newInstance;
@@ -268,48 +227,20 @@ public final class JavaTypst {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private static byte[] renderUnderLock(String content) {
-        ensureInitialized();
-        Memory memory = instance.memory();
-
-        byte[] inputBytes = content.getBytes(StandardCharsets.UTF_8);
-        int inLen = inputBytes.length;
-        int inPtr = (int) allocFn.apply(inLen)[0];
-        int outLenPtr = (int) allocFn.apply(4)[0];
-        try {
-            memory.write(inPtr, inputBytes);
-            int outPtr = (int) renderFn.apply(inPtr, inLen, outLenPtr)[0];
-            if (outPtr == 0) {
-                int errPtr = (int) lastErrPtrFn.apply()[0];
-                int errLen = (int) lastErrLenFn.apply()[0];
-                String errorMsg = memory.readString(errPtr, errLen);
-                throw new TypstRenderException(errorMsg);
-            }
-            int outLen = memory.readInt(outLenPtr);
-            byte[] pdfBytes = memory.readBytes(outPtr, outLen);
-            deallocFn.apply(outPtr, outLen);
-            return pdfBytes;
-        } finally {
-            deallocFn.apply(outLenPtr, 4);
-            deallocFn.apply(inPtr, inLen);
-            pendingFetches.clear();
-        }
-    }
-
-    private static byte[] renderWithInputsUnderLock(String content, byte[] encodedInputs) {
+    private static byte[] renderUnderLock(String content, byte[] optsBlob) {
         ensureInitialized();
         Memory memory = instance.memory();
 
         byte[] srcBytes = content.getBytes(StandardCharsets.UTF_8);
         int srcLen = srcBytes.length;
-        int inputsLen = encodedInputs.length;
+        int optsLen = optsBlob.length;
         int srcPtr = (int) allocFn.apply(srcLen)[0];
-        int inputsPtr = (int) allocFn.apply(inputsLen)[0];
+        int optsPtr = (int) allocFn.apply(optsLen)[0];
         int outLenPtr = (int) allocFn.apply(4)[0];
         try {
             memory.write(srcPtr, srcBytes);
-            memory.write(inputsPtr, encodedInputs);
-            int outPtr = (int) renderWithInputsFn.apply(srcPtr, srcLen, inputsPtr, inputsLen, outLenPtr)[0];
+            memory.write(optsPtr, optsBlob);
+            int outPtr = (int) renderFn.apply(srcPtr, srcLen, optsPtr, optsLen, outLenPtr)[0];
             if (outPtr == 0) {
                 int errPtr = (int) lastErrPtrFn.apply()[0];
                 int errLen = (int) lastErrLenFn.apply()[0];
@@ -322,16 +253,54 @@ public final class JavaTypst {
             return pdfBytes;
         } finally {
             deallocFn.apply(outLenPtr, 4);
-            deallocFn.apply(inputsPtr, inputsLen);
+            deallocFn.apply(optsPtr, optsLen);
             deallocFn.apply(srcPtr, srcLen);
             pendingFetches.clear();
         }
     }
 
     /**
-     * Encodes an inputs map into the wire format consumed by the {@code render_with_inputs} WASM
-     * export: a little-endian {@code u32} entry count, then for each entry a length-prefixed UTF-8
-     * key followed by a length-prefixed UTF-8 value.
+     * Encodes a {@link RenderOptions} into the TLV blob consumed by the {@code render} WASM
+     * export. Layout:
+     *
+     * <pre>
+     * field_count:u32   then, repeated field_count times:
+     *   tag:u32   1 = inputs, 2 = fonts
+     *   len:u32   length of the payload in bytes
+     *   payload:bytes   tag-specific (see encodeInputs / encodeFonts)
+     * </pre>
+     *
+     * Empty fields are omitted entirely — an empty inputs map or an empty fonts list does not
+     * contribute a TLV record, so a default {@link RenderOptions} produces just {@code [0,0,0,0]}.
+     */
+    private static byte[] encodeOptions(RenderOptions options) {
+        ByteArrayOutputStream fields = new ByteArrayOutputStream();
+        int fieldCount = 0;
+
+        if (!options.inputs().isEmpty()) {
+            byte[] payload = encodeInputs(options.inputs());
+            writeLittleEndianInt(fields, TAG_INPUTS);
+            writeLittleEndianInt(fields, payload.length);
+            fields.writeBytes(payload);
+            fieldCount++;
+        }
+        if (!options.fonts().isEmpty()) {
+            byte[] payload = encodeFonts(options.fonts());
+            writeLittleEndianInt(fields, TAG_FONTS);
+            writeLittleEndianInt(fields, payload.length);
+            fields.writeBytes(payload);
+            fieldCount++;
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        writeLittleEndianInt(out, fieldCount);
+        out.writeBytes(fields.toByteArray());
+        return out.toByteArray();
+    }
+
+    /**
+     * Wire format for {@code sys.inputs}: u32 entry count, then for each entry a length-prefixed
+     * UTF-8 key followed by a length-prefixed UTF-8 value. All integers little-endian.
      */
     private static byte[] encodeInputs(Map<String, String> inputs) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -351,49 +320,9 @@ public final class JavaTypst {
         return out.toByteArray();
     }
 
-    private static void writeLittleEndianInt(ByteArrayOutputStream out, int value) {
-        out.write(value & 0xFF);
-        out.write((value >>> 8) & 0xFF);
-        out.write((value >>> 16) & 0xFF);
-        out.write((value >>> 24) & 0xFF);
-    }
-
-    private static byte[] renderWithFontsUnderLock(String content, byte[] encodedFonts) {
-        ensureInitialized();
-        Memory memory = instance.memory();
-
-        byte[] srcBytes = content.getBytes(StandardCharsets.UTF_8);
-        int srcLen = srcBytes.length;
-        int fontsLen = encodedFonts.length;
-        int srcPtr = (int) allocFn.apply(srcLen)[0];
-        int fontsPtr = (int) allocFn.apply(fontsLen)[0];
-        int outLenPtr = (int) allocFn.apply(4)[0];
-        try {
-            memory.write(srcPtr, srcBytes);
-            memory.write(fontsPtr, encodedFonts);
-            int outPtr = (int) renderWithFontsFn.apply(srcPtr, srcLen, fontsPtr, fontsLen, outLenPtr)[0];
-            if (outPtr == 0) {
-                int errPtr = (int) lastErrPtrFn.apply()[0];
-                int errLen = (int) lastErrLenFn.apply()[0];
-                String errorMsg = memory.readString(errPtr, errLen);
-                throw new TypstRenderException(errorMsg);
-            }
-            int outLen = memory.readInt(outLenPtr);
-            byte[] pdfBytes = memory.readBytes(outPtr, outLen);
-            deallocFn.apply(outPtr, outLen);
-            return pdfBytes;
-        } finally {
-            deallocFn.apply(outLenPtr, 4);
-            deallocFn.apply(fontsPtr, fontsLen);
-            deallocFn.apply(srcPtr, srcLen);
-            pendingFetches.clear();
-        }
-    }
-
     /**
-     * Encodes a list of font files into the wire format consumed by the {@code render_with_fonts}
-     * WASM export: a little-endian {@code u32} entry count, then for each entry a little-endian
-     * {@code u32} length followed by that many raw font bytes.
+     * Wire format for custom fonts: u32 entry count, then for each entry a u32 length followed
+     * by that many raw font bytes. All integers little-endian.
      */
     private static byte[] encodeFonts(List<byte[]> fonts) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -404,6 +333,13 @@ public final class JavaTypst {
             out.writeBytes(font);
         }
         return out.toByteArray();
+    }
+
+    private static void writeLittleEndianInt(ByteArrayOutputStream out, int value) {
+        out.write(value & 0xFF);
+        out.write((value >>> 8) & 0xFF);
+        out.write((value >>> 16) & 0xFF);
+        out.write((value >>> 24) & 0xFF);
     }
 
     private static byte[] fetchPackage(String url) throws TypstPackageNotFoundException {

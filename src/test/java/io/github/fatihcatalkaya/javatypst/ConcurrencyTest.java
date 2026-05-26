@@ -61,8 +61,6 @@ import org.junit.jupiter.api.Test;
  *       {@link IllegalStateException} once any render has initialized the instance, regardless
  *       of which thread initialized it.</li>
  * </ul>
- *
- * <p>The tests below exercise each of these properties under contention.
  */
 public class ConcurrencyTest {
 
@@ -168,7 +166,9 @@ public class ConcurrencyTest {
         runConcurrently(THREADS, tid -> {
             for (int i = 0; i < ITERATIONS; i++) {
                 String expected = "tid=" + tid + "/iter=" + i;
-                byte[] pdf = JavaTypst.renderWithInputs("#sys.inputs.at(\"k\")", Map.of("k", expected));
+                byte[] pdf = JavaTypst.render(
+                        "#sys.inputs.at(\"k\")",
+                        RenderOptions.builder().inputs(Map.of("k", expected)).build());
                 assertEquals(expected, pdfText(pdf));
             }
         });
@@ -183,7 +183,9 @@ public class ConcurrencyTest {
             boolean useCustom = tid % 2 == 0;
             List<byte[]> fonts = useCustom ? List.of(customFont) : List.of();
             for (int i = 0; i < ITERATIONS; i++) {
-                byte[] pdf = JavaTypst.renderWithFonts("#set text(font: \"TeX Gyre Cursor\")\nrun-" + tid, fonts);
+                byte[] pdf = JavaTypst.render(
+                        "#set text(font: \"TeX Gyre Cursor\")\nrun-" + tid,
+                        RenderOptions.builder().fonts(fonts).build());
                 boolean present = embeddedFontNames(pdf).stream().anyMatch(n -> n.contains("TeXGyreCursor"));
                 assertEquals(useCustom, present, "tid=" + tid + " expected custom font present=" + useCustom);
             }
@@ -192,17 +194,26 @@ public class ConcurrencyTest {
 
     @Test
     public void mixedApiMethodsAreThreadSafe() throws Exception {
-        // Threads pick a different render entry point by tid % 3 so the same engine is hit
-        // through all three code paths concurrently. Each thread submits a unique tag and
-        // verifies the rendered text round-trips.
+        // Threads pick a different render configuration by tid % 3 so the same engine is hit
+        // through all three code paths concurrently: bare, inputs-only, fonts-only.
         runConcurrently(THREADS, tid -> {
             for (int i = 0; i < ITERATIONS; i++) {
                 String tag = "t" + tid + "i" + i;
                 byte[] pdf =
                         switch (tid % 3) {
                             case 0 -> JavaTypst.render(tag);
-                            case 1 -> JavaTypst.renderWithInputs("#sys.inputs.at(\"v\")", Map.of("v", tag));
-                            default -> JavaTypst.renderWithFonts(tag, List.of(customFont));
+                            case 1 ->
+                                JavaTypst.render(
+                                        "#sys.inputs.at(\"v\")",
+                                        RenderOptions.builder()
+                                                .inputs(Map.of("v", tag))
+                                                .build());
+                            default ->
+                                JavaTypst.render(
+                                        tag,
+                                        RenderOptions.builder()
+                                                .fonts(List.of(customFont))
+                                                .build());
                         };
                 assertEquals(tag, pdfText(pdf));
             }

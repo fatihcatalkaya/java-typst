@@ -60,154 +60,65 @@ pub unsafe extern "C" fn dealloc(ptr: *mut u8, len: u32) {
 
 // ── Render export ────────────────────────────────────────────────────────────
 
+/// Renders Typst markup to a PDF, with optional `sys.inputs` and custom fonts supplied via the
+/// TLV-encoded options blob (see [`parse_options`]).
+///
 /// # Safety
-/// - `in_ptr` must point to `in_len` valid bytes in linear memory
+/// - `src_ptr` must point to `src_len` valid UTF-8 bytes (the Typst source) in linear memory
+/// - `opts_ptr` must point to `opts_len` valid bytes encoding the render options;
+///   `[0,0,0,0]` (or any buffer with a leading u32 field-count of 0) means "no options"
 /// - `out_len` must point to a 4-byte writable location (allocated via `alloc(4)`)
 /// - The returned pointer, if non-null, must be freed via `dealloc(ptr, *out_len)`
 /// - The error string at `last_error_ptr()` is valid only until the next `render()` call
 #[no_mangle]
-pub unsafe extern "C" fn render(in_ptr: *const u8, in_len: u32, out_len: *mut u32) -> *mut u8 {
-    let source = {
-        let slice = std::slice::from_raw_parts(in_ptr, in_len as usize);
-        match String::from_utf8(slice.to_vec()) {
-            Ok(s) => s,
-            Err(e) => {
-                LAST_ERROR.with(|err| *err.borrow_mut() = e.to_string().into_bytes());
-                return std::ptr::null_mut();
-            }
-        }
-    };
-
-    match compile(source, None, Vec::new()) {
-        Ok(pdf) => {
-            let pdf_len = pdf.len();
-            *out_len = pdf_len as u32;
-            let ptr = alloc(pdf_len as u32);
-            if !ptr.is_null() {
-                std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
-            }
-            ptr
-        }
-        Err(msg) => {
-            LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
-            std::ptr::null_mut()
-        }
-    }
-}
-
-/// Renders Typst markup to PDF with a dictionary of inputs exposed as `sys.inputs`.
-///
-/// # Safety
-/// - `src_ptr` must point to `src_len` valid UTF-8 bytes (the Typst source) in linear memory
-/// - `inputs_ptr` must point to `inputs_len` valid bytes encoding the inputs map
-///   (see [`parse_inputs`] for the layout)
-/// - `out_len` must point to a 4-byte writable location (allocated via `alloc(4)`)
-/// - The returned pointer, if non-null, must be freed via `dealloc(ptr, *out_len)`
-/// - The error string at `last_error_ptr()` is valid only until the next render call
-#[no_mangle]
-pub unsafe extern "C" fn render_with_inputs(
+pub unsafe extern "C" fn render(
     src_ptr: *const u8,
     src_len: u32,
-    inputs_ptr: *const u8,
-    inputs_len: u32,
+    opts_ptr: *const u8,
+    opts_len: u32,
     out_len: *mut u32,
 ) -> *mut u8 {
     let source = {
         let slice = std::slice::from_raw_parts(src_ptr, src_len as usize);
         match String::from_utf8(slice.to_vec()) {
             Ok(s) => s,
-            Err(e) => {
-                LAST_ERROR.with(|err| *err.borrow_mut() = e.to_string().into_bytes());
-                return std::ptr::null_mut();
-            }
+            Err(e) => return fail(e.to_string()),
         }
     };
 
-    let inputs = {
-        let slice = std::slice::from_raw_parts(inputs_ptr, inputs_len as usize);
-        match parse_inputs(slice) {
-            Ok(dict) => dict,
-            Err(e) => {
-                LAST_ERROR.with(|err| *err.borrow_mut() = e.into_bytes());
-                return std::ptr::null_mut();
-            }
+    let opts = {
+        let slice = std::slice::from_raw_parts(opts_ptr, opts_len as usize);
+        match parse_options(slice) {
+            Ok(o) => o,
+            Err(e) => return fail(e),
         }
     };
 
-    match compile(source, Some(inputs), Vec::new()) {
-        Ok(pdf) => {
-            let pdf_len = pdf.len();
-            *out_len = pdf_len as u32;
-            let ptr = alloc(pdf_len as u32);
-            if !ptr.is_null() {
-                std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
-            }
-            ptr
-        }
-        Err(msg) => {
-            LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
-            std::ptr::null_mut()
-        }
+    match compile(source, opts.inputs, opts.fonts) {
+        Ok(pdf) => write_pdf_output(pdf, out_len),
+        Err(msg) => fail(msg),
     }
 }
 
-/// Renders Typst markup to PDF with a list of custom font files added to the engine.
-///
-/// Fonts are merged with the typst-kit embedded fonts; family names in the custom list
-/// shadow embedded ones (typst-as-lib pushes custom fonts into the book first).
+/// Copies the PDF bytes into a freshly-allocated WASM buffer and writes its length to `out_len`.
 ///
 /// # Safety
-/// - `src_ptr` must point to `src_len` valid UTF-8 bytes (the Typst source) in linear memory
-/// - `fonts_ptr` must point to `fonts_len` valid bytes encoding the font list
-///   (see [`parse_fonts`] for the layout)
-/// - `out_len` must point to a 4-byte writable location (allocated via `alloc(4)`)
-/// - The returned pointer, if non-null, must be freed via `dealloc(ptr, *out_len)`
-/// - The error string at `last_error_ptr()` is valid only until the next render call
-#[no_mangle]
-pub unsafe extern "C" fn render_with_fonts(
-    src_ptr: *const u8,
-    src_len: u32,
-    fonts_ptr: *const u8,
-    fonts_len: u32,
-    out_len: *mut u32,
-) -> *mut u8 {
-    let source = {
-        let slice = std::slice::from_raw_parts(src_ptr, src_len as usize);
-        match String::from_utf8(slice.to_vec()) {
-            Ok(s) => s,
-            Err(e) => {
-                LAST_ERROR.with(|err| *err.borrow_mut() = e.to_string().into_bytes());
-                return std::ptr::null_mut();
-            }
-        }
-    };
-
-    let fonts = {
-        let slice = std::slice::from_raw_parts(fonts_ptr, fonts_len as usize);
-        match parse_fonts(slice) {
-            Ok(f) => f,
-            Err(e) => {
-                LAST_ERROR.with(|err| *err.borrow_mut() = e.into_bytes());
-                return std::ptr::null_mut();
-            }
-        }
-    };
-
-    match compile(source, None, fonts) {
-        Ok(pdf) => {
-            let pdf_len = pdf.len();
-            *out_len = pdf_len as u32;
-            let ptr = alloc(pdf_len as u32);
-            if !ptr.is_null() {
-                std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
-            }
-            ptr
-        }
-        Err(msg) => {
-            LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
-            std::ptr::null_mut()
-        }
+/// Same preconditions as the `out_len` parameter of [`render`].
+unsafe fn write_pdf_output(pdf: Vec<u8>, out_len: *mut u32) -> *mut u8 {
+    let pdf_len = pdf.len();
+    *out_len = pdf_len as u32;
+    let ptr = alloc(pdf_len as u32);
+    if !ptr.is_null() {
+        std::ptr::copy_nonoverlapping(pdf.as_ptr(), ptr, pdf_len);
     }
+    ptr
+}
+
+/// Stashes `msg` in thread-local `LAST_ERROR` and returns the null pointer that signals
+/// failure to the Java host.
+fn fail(msg: String) -> *mut u8 {
+    LAST_ERROR.with(|e| *e.borrow_mut() = msg.into_bytes());
+    std::ptr::null_mut()
 }
 
 #[no_mangle]
@@ -252,9 +163,64 @@ fn compile(
         .map_err(|errors| format!("{errors:?}"))
 }
 
+// ── Options decoding ─────────────────────────────────────────────────────────
+
+/// Tag values for the TLV options blob. Adding a new option means picking a new tag here
+/// (and teaching `parse_options` how to dispatch it) — never a new WASM export.
+const TAG_INPUTS: u32 = 1;
+const TAG_FONTS: u32 = 2;
+
+/// Decoded render options. Fields absent from the blob keep their natural defaults
+/// (no `sys.inputs` injection, no custom fonts).
+struct RenderOptions {
+    inputs: Option<Dict>,
+    fonts: Vec<Vec<u8>>,
+}
+
+/// Decodes the render-options blob produced by the Java host:
+///
+/// ```text
+/// field_count: u32                            then, repeated `field_count` times:
+///   tag: u32      1 = inputs, 2 = fonts
+///   len: u32      length of `payload` in bytes
+///   payload: bytes   tag-specific (see `parse_inputs` / `parse_fonts`)
+/// ```
+///
+/// An empty buffer is treated identically to a buffer whose first u32 is zero — both mean
+/// "no options". Unknown tags are an error so a stale WASM never silently drops a field
+/// from a newer host.
+fn parse_options(bytes: &[u8]) -> Result<RenderOptions, String> {
+    let mut opts = RenderOptions {
+        inputs: None,
+        fonts: Vec::new(),
+    };
+    if bytes.is_empty() {
+        return Ok(opts);
+    }
+    let mut pos = 0usize;
+    let field_count = read_u32(bytes, &mut pos)?;
+    for _ in 0..field_count {
+        let tag = read_u32(bytes, &mut pos)?;
+        let len = read_u32(bytes, &mut pos)? as usize;
+        let end = pos
+            .checked_add(len)
+            .ok_or_else(|| "options: length overflow".to_string())?;
+        let payload = bytes
+            .get(pos..end)
+            .ok_or_else(|| "options: unexpected end of buffer".to_string())?;
+        match tag {
+            TAG_INPUTS => opts.inputs = Some(parse_inputs(payload)?),
+            TAG_FONTS => opts.fonts = parse_fonts(payload)?,
+            other => return Err(format!("options: unknown tag {other}")),
+        }
+        pos = end;
+    }
+    Ok(opts)
+}
+
 // ── Inputs decoding ──────────────────────────────────────────────────────────
 
-/// Decodes the `sys.inputs` dictionary from the wire format produced by the Java host:
+/// Decodes the `sys.inputs` dictionary from its wire format:
 ///
 /// ```text
 /// count: u32                          then, repeated `count` times:
@@ -276,38 +242,9 @@ fn parse_inputs(bytes: &[u8]) -> Result<Dict, String> {
     Ok(dict)
 }
 
-/// Reads a little-endian `u32` at `*pos`, advancing `pos` past it.
-fn read_u32(bytes: &[u8], pos: &mut usize) -> Result<u32, String> {
-    let end = pos
-        .checked_add(4)
-        .ok_or_else(|| "inputs: length overflow".to_string())?;
-    let slice = bytes
-        .get(*pos..end)
-        .ok_or_else(|| "inputs: unexpected end of buffer".to_string())?;
-    let value = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]);
-    *pos = end;
-    Ok(value)
-}
-
-/// Reads a length-prefixed UTF-8 string at `*pos`, advancing `pos` past it.
-fn read_str(bytes: &[u8], pos: &mut usize) -> Result<String, String> {
-    let len = read_u32(bytes, pos)? as usize;
-    let end = pos
-        .checked_add(len)
-        .ok_or_else(|| "inputs: length overflow".to_string())?;
-    let slice = bytes
-        .get(*pos..end)
-        .ok_or_else(|| "inputs: unexpected end of buffer".to_string())?;
-    let value = std::str::from_utf8(slice)
-        .map_err(|e| format!("inputs: invalid UTF-8: {e}"))?
-        .to_string();
-    *pos = end;
-    Ok(value)
-}
-
 // ── Fonts decoding ───────────────────────────────────────────────────────────
 
-/// Decodes the custom fonts list from the wire format produced by the Java host:
+/// Decodes the custom fonts list from its wire format:
 ///
 /// ```text
 /// count: u32                          then, repeated `count` times:
@@ -332,6 +269,37 @@ fn parse_fonts(bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
         pos = end;
     }
     Ok(fonts)
+}
+
+// ── Shared decode primitives ─────────────────────────────────────────────────
+
+/// Reads a little-endian `u32` at `*pos`, advancing `pos` past it.
+fn read_u32(bytes: &[u8], pos: &mut usize) -> Result<u32, String> {
+    let end = pos
+        .checked_add(4)
+        .ok_or_else(|| "buffer: length overflow".to_string())?;
+    let slice = bytes
+        .get(*pos..end)
+        .ok_or_else(|| "buffer: unexpected end of buffer".to_string())?;
+    let value = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]);
+    *pos = end;
+    Ok(value)
+}
+
+/// Reads a length-prefixed UTF-8 string at `*pos`, advancing `pos` past it.
+fn read_str(bytes: &[u8], pos: &mut usize) -> Result<String, String> {
+    let len = read_u32(bytes, pos)? as usize;
+    let end = pos
+        .checked_add(len)
+        .ok_or_else(|| "buffer: length overflow".to_string())?;
+    let slice = bytes
+        .get(*pos..end)
+        .ok_or_else(|| "buffer: unexpected end of buffer".to_string())?;
+    let value = std::str::from_utf8(slice)
+        .map_err(|e| format!("buffer: invalid UTF-8: {e}"))?
+        .to_string();
+    *pos = end;
+    Ok(value)
 }
 
 // ── HostFetchResolver ────────────────────────────────────────────────────────

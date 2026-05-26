@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -23,8 +22,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * Exercises {@link JavaTypst#renderWithFonts} — passing custom font files (raw bytes) directly to
- * the engine, as opposed to pointing it at a search directory.
+ * Exercises the custom-fonts feature via the unified {@link JavaTypst#render(String,
+ * RenderOptions)} entry point and {@link RenderOptions.Builder#fonts}.
  *
  * <p>The bundled test font is TeX Gyre Cursor (GUST Font License), a monospace OTF carrying the
  * typographic family name {@code "TeX Gyre Cursor"} and the PostScript name
@@ -47,6 +46,11 @@ public class FontsTest {
             customFont = is.readAllBytes();
         }
         assertTrue(customFont.length > 0, "test font is empty");
+    }
+
+    /** Renders {@code content} with the given fonts list and returns the produced PDF. */
+    private static byte[] renderWithFonts(String content, List<byte[]> fonts) {
+        return JavaTypst.render(content, RenderOptions.builder().fonts(fonts).build());
     }
 
     /** Returns every PostScript font name embedded across all pages of the PDF. */
@@ -76,8 +80,8 @@ public class FontsTest {
 
     @Test
     public void customFontIsEmbeddedInOutputPdf() throws IOException {
-        byte[] pdf = JavaTypst.renderWithFonts(
-                "#set text(font: \"" + FONT_FAMILY + "\")\nMonospaced sample.", List.of(customFont));
+        byte[] pdf =
+                renderWithFonts("#set text(font: \"" + FONT_FAMILY + "\")\nMonospaced sample.", List.of(customFont));
         Set<String> names = embeddedFontNames(pdf);
         assertTrue(
                 names.stream().anyMatch(n -> n.contains(FONT_PS_NAME_FRAGMENT)),
@@ -88,14 +92,13 @@ public class FontsTest {
     public void customFontActuallyRendersTheRequestedGlyphs() throws IOException {
         // PDFBox text extraction round-trips the codepoints regardless of which font shaped them,
         // so this asserts the page was produced (and that the custom font did not break shaping).
-        byte[] pdf =
-                JavaTypst.renderWithFonts("#set text(font: \"" + FONT_FAMILY + "\")\nABC 123", List.of(customFont));
+        byte[] pdf = renderWithFonts("#set text(font: \"" + FONT_FAMILY + "\")\nABC 123", List.of(customFont));
         assertEquals("ABC 123", pdfText(pdf));
     }
 
     @Test
     public void emptyFontListStillRendersWithEmbeddedFonts() throws IOException {
-        byte[] pdf = JavaTypst.renderWithFonts("= Hello", List.of());
+        byte[] pdf = renderWithFonts("= Hello", List.of());
         assertEquals("Hello", pdfText(pdf));
         // No custom font was passed, so the TeXGyreCursor PostScript name must not appear.
         Set<String> names = embeddedFontNames(pdf);
@@ -108,7 +111,7 @@ public class FontsTest {
     public void embeddedFontsRemainAvailableAlongsideCustomOnes() throws IOException {
         // "Libertinus Serif" ships with typst-kit's embedded fonts. With a custom font also passed,
         // both font sources must coexist — selecting the embedded family must still work.
-        byte[] pdf = JavaTypst.renderWithFonts("#set text(font: \"Libertinus Serif\")\nlorem", List.of(customFont));
+        byte[] pdf = renderWithFonts("#set text(font: \"Libertinus Serif\")\nlorem", List.of(customFont));
         assertEquals("lorem", pdfText(pdf));
         Set<String> names = embeddedFontNames(pdf);
         assertTrue(
@@ -120,8 +123,7 @@ public class FontsTest {
     public void multipleFontsCanBePassedInOneCall() throws IOException {
         // Passing the same font file twice still produces a single registered family — proves the
         // list-encoding path handles count > 1 without corrupting subsequent reads.
-        byte[] pdf = JavaTypst.renderWithFonts(
-                "#set text(font: \"" + FONT_FAMILY + "\")\nXYZ", List.of(customFont, customFont));
+        byte[] pdf = renderWithFonts("#set text(font: \"" + FONT_FAMILY + "\")\nXYZ", List.of(customFont, customFont));
         assertEquals("XYZ", pdfText(pdf));
         Set<String> names = embeddedFontNames(pdf);
         assertTrue(
@@ -133,7 +135,7 @@ public class FontsTest {
     public void plainRenderStillWorksAfterRenderWithFonts() throws IOException {
         // Verifies that the new code path does not leave the shared engine in a state that breaks
         // subsequent plain renders.
-        JavaTypst.renderWithFonts("#set text(font: \"" + FONT_FAMILY + "\")\nseed", List.of(customFont));
+        renderWithFonts("#set text(font: \"" + FONT_FAMILY + "\")\nseed", List.of(customFont));
         byte[] plain = JavaTypst.render("= Plain");
         assertEquals("Plain", pdfText(plain));
     }
@@ -143,35 +145,17 @@ public class FontsTest {
         // typst's `Font::iter` yields an empty iterator for unparseable bytes — they are silently
         // skipped, so a render that does not require the missing font still succeeds.
         byte[] garbage = new byte[] {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-        byte[] pdf = JavaTypst.renderWithFonts("plain", List.of(garbage));
+        byte[] pdf = renderWithFonts("plain", List.of(garbage));
         assertEquals("plain", pdfText(pdf));
     }
 
     @Test
     public void renderWithFontsPropagatesCompilationErrors() {
-        // Hard typst syntax error — must surface as TypstRenderException through the new entry
-        // point just as it does through `render`.
-        TypstRenderException ex = assertThrows(
-                TypstRenderException.class, () -> JavaTypst.renderWithFonts("#let x =", List.of(customFont)));
+        // Hard typst syntax error — must surface as TypstRenderException through the unified
+        // entry point just as it does through a plain render.
+        TypstRenderException ex =
+                assertThrows(TypstRenderException.class, () -> renderWithFonts("#let x =", List.of(customFont)));
         assertNotNull(ex.getMessage());
         assertFalse(ex.getMessage().isBlank());
-    }
-
-    @Test
-    public void nullContentIsRejected() {
-        assertThrows(NullPointerException.class, () -> JavaTypst.renderWithFonts(null, List.of(customFont)));
-    }
-
-    @Test
-    public void nullFontListIsRejected() {
-        assertThrows(NullPointerException.class, () -> JavaTypst.renderWithFonts("text", null));
-    }
-
-    @Test
-    public void nullFontEntryIsRejected() {
-        List<byte[]> fonts = new ArrayList<>();
-        fonts.add(customFont);
-        fonts.add(null);
-        assertThrows(NullPointerException.class, () -> JavaTypst.renderWithFonts("text", fonts));
     }
 }

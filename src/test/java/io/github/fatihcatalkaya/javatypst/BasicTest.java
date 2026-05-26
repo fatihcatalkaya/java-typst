@@ -43,10 +43,12 @@ public class BasicTest {
 
     @Test
     public void testPackageImportProducesError() {
-        // Empty map — map-only mode, no HTTP fallback — missing package must throw
+        // Empty packages map — air-gapped mode, no HTTP fallback — missing package must throw
         assertThrows(
                 TypstRenderException.class,
-                () -> JavaTypst.render("#import \"@preview/example:0.1.0\": *\n= Hello", Map.of()));
+                () -> JavaTypst.render(
+                        "#import \"@preview/example:0.1.0\": *\n= Hello",
+                        RenderOptions.builder().packages(Map.of()).build()));
     }
 
     @Test
@@ -91,9 +93,10 @@ public class BasicTest {
             assertNotNull(is, "testpkg-0.1.0.tar.gz missing from test resources");
             tarGz = is.readAllBytes();
         }
-        Map<String, byte[]> packages = Map.of("@preview/testpkg:0.1.0", tarGz);
-        // Will fail until WASM is rebuilt in Task 8 — that is expected for now
-        byte[] pdf = JavaTypst.render("#import \"@preview/testpkg:0.1.0\": hello\n#hello()", packages);
+        RenderOptions opts = RenderOptions.builder()
+                .packages(Map.of("@preview/testpkg:0.1.0", tarGz))
+                .build();
+        byte[] pdf = JavaTypst.render("#import \"@preview/testpkg:0.1.0\": hello\n#hello()", opts);
         assertNotNull(pdf);
         assertTrue(pdf.length > 0);
     }
