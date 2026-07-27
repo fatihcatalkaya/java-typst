@@ -79,7 +79,7 @@ public class BasicTest {
                 "true".equalsIgnoreCase(System.getProperty("packages.online")),
                 "Skipped: run with -Dpackages.online=true to enable online package test");
         byte[] pdf = JavaTypst.render(
-                "#import \"@preview/cetz:0.3.2\": canvas, draw\n" + "#canvas({ draw.circle((0,0), radius: 1) })");
+                "#import \"@preview/cetz:0.5.2\": canvas, draw\n" + "#canvas({ draw.circle((0,0), radius: 1) })");
         assertNotNull(pdf);
         assertTrue(pdf.length > 0);
     }
