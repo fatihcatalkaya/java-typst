@@ -19,38 +19,14 @@ binary dependencies. It even supports online Typst packages.
 byte[] pdf = JavaTypst.render("= Hello, World!\n_Lorem_ *ipsum*");
 ```
 
-The main artifact is a thin jar; Chicory is resolved as a normal transitive dependency.
-An all-in-one jar is also published under the `jar-with-dependencies` classifier.
-
 ## Android
 
-Requires `minSdkVersion 26` (Android 8.0). Below that, `assembleDebug` fails while dexing
-Chicory:
+Requires `minSdkVersion 26` (Android 8.0).
 
-```
-MethodHandle.invoke and MethodHandle.invokeExact are only supported starting with Android O
-(--min-api 26): Lcom/dylibso/chicory/runtime/ByteArrayMemory;->writeI32(II)V
-```
+Downloading Typst packages needs the `INTERNET` permission:
 
-`ByteArrayMemory` accesses memory through polymorphic `VarHandle` methods, which D8 cannot
-desugar. The class belongs to Chicory rather than to this library, so the floor cannot be
-lowered here.
-
-No dependency exclusions are needed — the published main artifact contains only this
-library's own classes.
-
-Two runtime notes:
-
-```java
-// Android's user.home is "/", so the default cache directory is not writable.
-JavaTypst.setPackageCacheDirectory(context.getCacheDir().toPath());
-```
-
-Downloading `@preview` packages needs `android.permission.INTERNET`. If you would rather not
-resolve anything over the network, pass the archives yourself and no HTTP request is made:
-
-```java
-byte[] pdf = JavaTypst.render(content, Map.of("@preview/cetz:0.3.2", archiveBytes));
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
 ```
 
 ## Building from source
