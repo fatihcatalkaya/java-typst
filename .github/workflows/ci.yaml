@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  BINARYEN_VERSION: 129
+  BINARYEN_VERSION: 131
 
 jobs:
 
