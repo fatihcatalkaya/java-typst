@@ -1,3 +1,15 @@
+# [2.2.0](https://github.com/fatihcatalkaya/java-typst/compare/2.1.0...2.2.0) (2026-07-27)
+
+
+### Bug Fixes
+
+* Android compatibility (duplicate chicory classes, java.net.http, minSdk) ([#12](https://github.com/fatihcatalkaya/java-typst/issues/12)) ([0c52869](https://github.com/fatihcatalkaya/java-typst/commit/0c528693c341bfa0df3bd2795bfcc599651a1f47))
+
+
+### Features
+
+* upgrade Typst to 0.15.1 ([d411d5b](https://github.com/fatihcatalkaya/java-typst/commit/d411d5bd2c8789a60d4f4197866bf32828735f6c))
+
 # [2.1.0](https://github.com/fatihcatalkaya/java-typst/compare/2.0.0...2.1.0) (2026-05-06)
 
 
