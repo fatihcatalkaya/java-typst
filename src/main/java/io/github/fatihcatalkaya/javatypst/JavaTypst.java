@@ -14,6 +14,7 @@ import com.dylibso.chicory.wasm.types.ValType;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -36,8 +37,11 @@ public final class JavaTypst {
 
     // ── Package resolution configuration ─────────────────────────────────────
 
-    private static volatile TypstPackageResolver packageResolver = new HttpPackageResolver();
-    private static volatile Path packageCacheDir = defaultCacheDir();
+    // Both are created on first use rather than in <clinit>, so that merely loading this class
+    // stays free of side effects. On Android an eagerly constructed default resolver would make
+    // every static call on JavaTypst fail, including ones that never resolve a package.
+    private static volatile TypstPackageResolver packageResolver;
+    private static volatile Path packageCacheDir;
     private static volatile PackageDiskCache diskCache;
 
     // Set for the duration of a render(String, Map) call (URL-keyed, map-only mode).
@@ -47,6 +51,36 @@ public final class JavaTypst {
     // Holds fetched bytes between the two-call host protocol (size-query then data-write).
     // Safe without synchronization because all rendering is serialized under LOCK.
     private static final Map<String, byte[]> pendingFetches = new HashMap<>();
+
+    // ── Lazily created defaults ───────────────────────────────────────────────
+
+    private static TypstPackageResolver packageResolver() {
+        TypstPackageResolver resolver = packageResolver;
+        if (resolver == null) {
+            synchronized (LOCK) {
+                resolver = packageResolver;
+                if (resolver == null) {
+                    resolver = new HttpPackageResolver();
+                    packageResolver = resolver;
+                }
+            }
+        }
+        return resolver;
+    }
+
+    private static Path packageCacheDir() {
+        Path dir = packageCacheDir;
+        if (dir == null) {
+            synchronized (LOCK) {
+                dir = packageCacheDir;
+                if (dir == null) {
+                    dir = defaultCacheDir();
+                    packageCacheDir = dir;
+                }
+            }
+        }
+        return dir;
+    }
 
     // ── Public configuration API ──────────────────────────────────────────────
 
@@ -151,7 +185,7 @@ public final class JavaTypst {
     private static void ensureInitialized() {
         if (instance != null) return;
         try {
-            diskCache = new PackageDiskCache(packageCacheDir);
+            diskCache = new PackageDiskCache(packageCacheDir());
 
             var wasi = WasiPreview1.builder()
                     .withOptions(WasiOptions.builder().build())
@@ -252,7 +286,7 @@ public final class JavaTypst {
             return bytes;
         }
         String[] p = parsePackageUrl(url);
-        return diskCache.get(p[0], p[1], p[2], packageResolver);
+        return diskCache.get(p[0], p[1], p[2], packageResolver());
     }
 
     /** Parses "https://packages.typst.org/preview/cetz-0.3.2.tar.gz" → ["preview","cetz","0.3.2"] */
@@ -279,9 +313,11 @@ public final class JavaTypst {
         return "https://packages.typst.org/" + namespace + "/" + name + "-" + version + ".tar.gz";
     }
 
+    // Uses Paths.get rather than the Java 11 Path.of factory, which older Android runtimes lack.
     private static Path defaultCacheDir() {
         String xdg = System.getenv("XDG_CACHE_HOME");
-        Path base = (xdg != null && !xdg.isEmpty()) ? Path.of(xdg) : Path.of(System.getProperty("user.home"), ".cache");
+        Path base =
+                (xdg != null && !xdg.isEmpty()) ? Paths.get(xdg) : Paths.get(System.getProperty("user.home"), ".cache");
         return base.resolve("java-typst/packages");
     }
 
