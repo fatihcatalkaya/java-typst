@@ -9,7 +9,7 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 use typst::diag::{FileError, FileResult};
 use typst::foundations::Bytes;
-use typst::syntax::{FileId, Source};
+use typst::syntax::{FileId, Source, VirtualRoot};
 use typst_as_lib::file_resolver::FileResolver;
 use typst_as_lib::typst_kit_options::TypstKitFontOptions;
 use typst_as_lib::TypstEngine;
@@ -132,11 +132,8 @@ struct HostFetchResolver;
 
 impl FileResolver for HostFetchResolver {
     fn resolve_binary(&self, id: FileId) -> FileResult<Cow<'_, Bytes>> {
-        if id.package().is_none() {
-            return Err(file_not_found(id));
-        }
         let key = ensure_package_cached(id)?;
-        let vpath = id.vpath().as_rootless_path().to_path_buf();
+        let vpath = PathBuf::from(id.vpath().get_without_slash());
         PACKAGE_CACHE.with(|cache| {
             cache.borrow()
                 .get(&key)
@@ -147,11 +144,8 @@ impl FileResolver for HostFetchResolver {
     }
 
     fn resolve_source(&self, id: FileId) -> FileResult<Cow<'_, Source>> {
-        if id.package().is_none() {
-            return Err(file_not_found(id));
-        }
         let key = ensure_package_cached(id)?;
-        let vpath = id.vpath().as_rootless_path().to_path_buf();
+        let vpath = PathBuf::from(id.vpath().get_without_slash());
         PACKAGE_CACHE.with(|cache| {
             let borrowed = cache.borrow();
             let bytes = borrowed
@@ -167,12 +161,15 @@ impl FileResolver for HostFetchResolver {
 }
 
 fn file_not_found(id: FileId) -> FileError {
-    FileError::NotFound(id.vpath().as_rootless_path().to_path_buf())
+    FileError::NotFound(PathBuf::from(id.vpath().get_without_slash()))
 }
 
 /// Returns the cache key for `id`'s package, fetching the archive if not yet cached.
+/// Ids that are not rooted in a package resolve to `FileError::NotFound`.
 fn ensure_package_cached(id: FileId) -> FileResult<String> {
-    let spec = id.package().expect("caller verified package is Some");
+    let VirtualRoot::Package(spec) = id.root() else {
+        return Err(file_not_found(id));
+    };
     let key = format!("{}/{}/{}", spec.namespace, spec.name, spec.version);
     if PACKAGE_CACHE.with(|c| c.borrow().contains_key(&key)) {
         return Ok(key);
