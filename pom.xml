@@ -208,20 +208,32 @@
                     </execution>
                 </executions>
             </plugin>
+            <!--
+                The main artifact is a thin jar so that consumers resolve chicory through normal
+                transitive dependency resolution. Overwriting it with the shaded assembly used to
+                ship chicory's classes twice - once unpacked in this jar, once via the declared
+                dependencies - which breaks any build that dexes or merges the classpath (Android)
+                and silently pins consumers to our chicory version everywhere else.
+
+                The all-in-one jar is still published, under the jar-with-dependencies classifier.
+            -->
             <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.7.1</version>
                 <executions>
                     <execution>
+                        <id>fat-jar</id>
                         <phase>package</phase>
                         <goals>
                             <goal>single</goal>
                         </goals>
+                        <configuration>
+                            <descriptorRefs>
+                                <descriptorRef>jar-with-dependencies</descriptorRef>
+                            </descriptorRefs>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <descriptorRefs>jar-with-dependencies</descriptorRefs>
-                    <appendAssemblyId>false</appendAssemblyId>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

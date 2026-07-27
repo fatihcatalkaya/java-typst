@@ -19,6 +19,16 @@ binary dependencies. It even supports online Typst packages.
 byte[] pdf = JavaTypst.render("= Hello, World!\n_Lorem_ *ipsum*");
 ```
 
+## Android
+
+Requires `minSdkVersion 26` (Android 8.0).
+
+Downloading Typst packages needs the `INTERNET` permission:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
 ## Building from source
 
 Requires a Rust toolchain with the `wasm32-wasip1` target:
